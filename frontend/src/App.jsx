@@ -4,7 +4,9 @@ import TrainingConfig from './components/TrainingConfig'
 import TrainingMonitor from './components/TrainingMonitor'
 import TrainingJobsList from './components/TrainingJobsList'
 import SimulatedDataFeed from './components/SimulatedDataFeed'
+import WelcomePage from './components/WelcomePage'
 import { BASE_PATIENTS, SimulationProvider, useSimulation } from './simulationContext'
+import './welcome.css'
 
 const modelStats = [
   { label: 'AUC-ROC', value: '0.938', tone: 'good' },
@@ -79,16 +81,25 @@ function Shell({ children }) {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <Link to="/" className="brand" aria-label="Predictive ICU home">
-          <span className="brand-mark">IC</span>
+        <Link to="/" className="brand" aria-label="SynCura clinical intelligence">
+          <svg className="brand-logo" viewBox="0 0 48 48" width="32" height="32" fill="none">
+            <path
+              d="M24 4C13.5 4 5 12.5 5 23c0 8 4.5 15 11 18.5M24 4c10.5 0 19 8.5 19 19c0 8-4.5 15-11 18.5M24 4v28m-8-8c0-4.4 3.6-8 8-8s8 3.6 8 8-3.6 8-8 8-8-3.6-8-8Z"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <circle cx="24" cy="32" r="3" fill="currentColor" />
+          </svg>
           <span>
-            <strong>ICU Sentinel</strong>
-            <small>Predictive Monitoring</small>
+            <strong>SynCura</strong>
+            <small>Clinical Intelligence</small>
           </span>
         </Link>
 
         <nav className="nav-stack" aria-label="Primary navigation">
-          <NavLink to="/" end className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+          <NavLink to="/dashboard" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
             <span aria-hidden="true">⌁</span>
             Dashboard
           </NavLink>
@@ -322,8 +333,8 @@ function Dashboard() {
     <Shell>
       <section className="page-header">
         <div>
-          <p className="eyebrow">Critical care command center</p>
-          <h1>Predictive ICU Monitoring System</h1>
+          <p className="eyebrow">Real-time patient intelligence</p>
+          <h1>SynCura Dashboard</h1>
         </div>
         <div className="header-actions">
           <Link to="/training/new" className="button secondary">New model run</Link>
@@ -557,7 +568,8 @@ export default function App() {
     <SimulationProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/" element={<WelcomePage />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/simulated-data" element={<RoutedPage><SimulatedDataFeed /></RoutedPage>} />
           <Route path="/training" element={<RoutedPage><TrainingJobsList /></RoutedPage>} />
           <Route path="/training/new" element={<RoutedPage><TrainingConfig /></RoutedPage>} />

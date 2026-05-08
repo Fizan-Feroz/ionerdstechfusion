@@ -1,0 +1,29 @@
+2026-05-08 13:09:34,437 INFO Loading PhysioNet data...
+2026-05-08 13:09:40,439 INFO Loaded X=(274462, 60, 5) y=(274462,), class distribution: [238853  35609]
+2026-05-08 13:09:40,441 INFO Training LSTM...
+2026-05-08 13:37:40,438 INFO Saving model to ml\training_runs\run_codex_20260508_icu_lstm\model.pt
+2026-05-08 13:37:40,442 INFO Evaluating...
+Traceback (most recent call last):
+  File "C:\Users\fizan\AppData\Local\Programs\Python\Python310\lib\runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "C:\Users\fizan\AppData\Local\Programs\Python\Python310\lib\runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "C:\Users\fizan\Downloads\Techfusion\PROJ\ml\train.py", line 109, in <module>
+    main()
+  File "C:\Users\fizan\Downloads\Techfusion\PROJ\ml\train.py", line 101, in main
+    metrics = evaluate_model(model, X, y)
+  File "C:\Users\fizan\Downloads\Techfusion\PROJ\ml\train.py", line 51, in evaluate_model
+    probs = model(xb).numpy()
+  File "C:\Users\fizan\Downloads\Techfusion\PROJ\.venv\lib\site-packages\torch\nn\modules\module.py", line 1736, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "C:\Users\fizan\Downloads\Techfusion\PROJ\.venv\lib\site-packages\torch\nn\modules\module.py", line 1747, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "C:\Users\fizan\Downloads\Techfusion\PROJ\ml\train_lstm.py", line 30, in forward
+    out, _ = self.lstm(x)
+  File "C:\Users\fizan\Downloads\Techfusion\PROJ\.venv\lib\site-packages\torch\nn\modules\module.py", line 1736, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "C:\Users\fizan\Downloads\Techfusion\PROJ\.venv\lib\site-packages\torch\nn\modules\module.py", line 1747, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "C:\Users\fizan\Downloads\Techfusion\PROJ\.venv\lib\site-packages\torch\nn\modules\rnn.py", line 1123, in forward
+    result = _VF.lstm(
+RuntimeError: [enforce fail at alloc_cpu.cpp:114] data. DefaultCPUAllocator: not enough memory: you tried to allocate 36132384760 bytes.
