@@ -11,6 +11,7 @@ import os
 import json
 import numpy as np
 import warnings
+import logging
 from sklearn.metrics import roc_auc_score, accuracy_score, precision_score, recall_score
 import torch
 
@@ -20,16 +21,37 @@ from ml.train_lstm import train as quick_train, LSTMModel
 warnings.filterwarnings('ignore')
 
 
+def setup_logging(log_path):
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    logger = logging.getLogger('train')
+    logger.setLevel(logging.INFO)
+    # avoid duplicate handlers on repeated calls
+    if not logger.handlers:
+        fh = logging.FileHandler(log_path)
+        fh.setLevel(logging.INFO)
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.INFO)
+        fmt = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+        fh.setFormatter(fmt)
+        ch.setFormatter(fmt)
+        logger.addHandler(fh)
+        logger.addHandler(ch)
+    return logger
+
+
 def save_model(model, path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     torch.save(model.state_dict(), path)
 
 
-def evaluate_model(model, X, y):
+def evaluate_model(model, X, y, batch_size=4096):
     model.eval()
+    probs_batches = []
     with torch.no_grad():
-        xb = torch.tensor(X, dtype=torch.float32)
-        probs = model(xb).numpy()
+        for start in range(0, len(X), batch_size):
+            xb = torch.tensor(X[start:start + batch_size], dtype=torch.float32)
+            probs_batches.append(model(xb).numpy())
+    probs = np.concatenate(probs_batches)
     auc = roc_auc_score(y, probs) if len(np.unique(y)) > 1 else float('nan')
     preds = (probs > 0.5).astype(int)
     acc = accuracy_score(y, preds)
@@ -46,10 +68,21 @@ def main():
     parser.add_argument('--window', type=int, default=60, help='Window size in minutes')
     parser.add_argument('--max-patients', type=int, default=None)
     parser.add_argument('--epochs', type=int, default=5)
-    parser.add_argument('--out', default='ml/models/lstm_baseline.pt')
+    parser.add_argument('--run-dir', default=None, help='Directory to store run outputs (model, logs, metrics)')
     args = parser.parse_args()
 
-    print('Loading PhysioNet data...')
+    # create a run directory if not provided
+    if args.run_dir:
+        run_dir = args.run_dir
+    else:
+        import datetime
+        run_dir = os.path.join('ml', 'training_runs', 'run_' + datetime.datetime.now().strftime('%Y%m%d_%H%M%S'))
+
+    os.makedirs(run_dir, exist_ok=True)
+    log_path = os.path.join(run_dir, 'training.log')
+    logger = setup_logging(log_path)
+
+    logger.info('Loading PhysioNet data...')
     X, y = load_and_create_sequences(
         physionet_dir=args.physionet,
         outcomes_file=args.outcomes,
@@ -57,19 +90,22 @@ def main():
         window_minutes=args.window,
         max_patients=args.max_patients
     )
-    print(f'Loaded X={X.shape} y={y.shape}, class distribution: {np.bincount(y)}')
+    logger.info(f'Loaded X={X.shape} y={y.shape}, class distribution: {np.bincount(y)}')
 
-    print('Training LSTM...')
+    logger.info('Training LSTM...')
+    # quick_train prints epoch progress; also log around it
     model = quick_train(X, y, epochs=args.epochs)
 
-    print('Saving model...')
-    save_model(model, args.out)
+    model_path = os.path.join(run_dir, 'model.pt')
+    logger.info('Saving model to %s', model_path)
+    save_model(model, model_path)
 
-    print('Evaluating...')
+    logger.info('Evaluating...')
     metrics = evaluate_model(model, X, y)
-    with open('ml/metrics.json', 'w') as f:
+    metrics_path = os.path.join(run_dir, 'metrics.json')
+    with open(metrics_path, 'w') as f:
         json.dump(metrics, f, indent=2)
-    print('Metrics:', metrics)
+    logger.info('Metrics: %s', metrics)
 
 
 if __name__ == '__main__':

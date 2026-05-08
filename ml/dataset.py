@@ -42,11 +42,18 @@ def load_physionet_batch(physionet_dir, outcomes_file=None, max_patients=None):
     """Load all PhysioNet patient files from a directory."""
     outcomes = {}
     if outcomes_file and os.path.exists(outcomes_file):
-        with open(outcomes_file, 'r') as f:
-            for line in f:
-                parts = line.strip().split(',')
-                if len(parts) >= 2:
-                    outcomes[parts[0]] = int(parts[1])
+        outcomes_df = pd.read_csv(outcomes_file)
+        if {'RecordID', 'In-hospital_death'}.issubset(outcomes_df.columns):
+            outcomes = dict(zip(
+                outcomes_df['RecordID'].astype(str),
+                outcomes_df['In-hospital_death'].astype(int)
+            ))
+        else:
+            with open(outcomes_file, 'r') as f:
+                for line in f:
+                    parts = line.strip().split(',')
+                    if len(parts) >= 2:
+                        outcomes[parts[0]] = int(parts[1])
     
     patient_files = sorted(glob.glob(os.path.join(physionet_dir, '*.txt')))
     if max_patients:
@@ -78,9 +85,11 @@ def create_sequences_from_physionet(data_list, vital_features=None, window_minut
         if len(available) == 0:
             continue
         
-        df_vitals = df_pivot[available].copy()
-        df_vitals = df_vitals.asfreq(freq='1min').interpolate(method='linear')
-        df_vitals = normalize(df_vitals)
+        minute_index = range(int(df_pivot.index.min()), int(df_pivot.index.max()) + 1)
+        df_vitals = df_pivot.reindex(index=minute_index, columns=vital_features)
+        df_vitals = df_vitals.interpolate(method='linear', limit_direction='both')
+        df_vitals = df_vitals.ffill().bfill()
+        df_vitals = normalize(df_vitals).fillna(0)
         
         seq_len = window_minutes
         if len(df_vitals) < seq_len:
