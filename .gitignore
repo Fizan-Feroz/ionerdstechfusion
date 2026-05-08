@@ -2,14 +2,40 @@
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+.DS_Store
 
 # VSCode
 .vscode/
+*.code-workspace
 
 # Python
 __pycache__/
 *.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
 
 # Node
 node_modules/
 dist/
+build/
+package-lock.json
+yarn.lock
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
