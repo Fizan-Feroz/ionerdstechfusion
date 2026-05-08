@@ -138,3 +138,67 @@ If the page does not load or CPU usage spikes:
    npm run build
    ```
 4. Keep only one Vite dev server running at a time.
+
+Feature Log (Implemented)
+-------------------------
+
+This section tracks the currently implemented product capabilities end-to-end.
+
+### 1) Real-time ICU dashboard simulation
+- Live patient risk board with ranked deterioration probability
+- Synthetic real-time vitals updates for each patient (HR, SpO2, RR, Temp)
+- Trend sparkline for each patient card
+- Risk dial and status buckets (`Stable`, `Watch`, `High`, `Critical`)
+- Last update timestamp shown in UI
+
+### 2) Scenario simulation controls
+- Scenario presets:
+  - `Baseline Mix`
+  - `Respiratory Decline`
+  - `Septic Shock`
+  - `Cardiac Stress`
+  - `Recovery Trend`
+- Start/Pause simulation control
+- Reset simulation to baseline state
+
+### 3) Real-time clinical alerts
+- Live alert stream panel on dashboard
+- Rule-based threshold alerts for:
+  - Critical risk escalation
+  - Low oxygen saturation (SpO2)
+  - Elevated respiratory rate
+  - High fever/infection trend
+- Active alert counter in panel header
+
+### 4) Explainability and score impact
+- Per-patient "Inspect impact" action from risk list
+- Risk impact breakdown by vital sign:
+  - Heart Rate
+  - SpO2 Saturation
+  - Respiratory Rate
+  - Temperature
+- Signed contribution display as risk points (`+/-`)
+- Waveform explainability overlay with color-coded contributors
+
+### 5) Clinical threshold tuning and evaluation
+- Interactive alert threshold slider (risk threshold tuning)
+- Real-time performance readouts:
+  - Sensitivity
+  - Specificity
+  - Precision
+  - False alarms
+- NEWS2 baseline comparison section (`NEWS2 >= 7`) vs AI model
+- Average early warning lead-time estimate shown in analytics
+
+### 6) Backend and ML capabilities in repository
+- FastAPI ingestion and patient APIs:
+  - `POST /ingest`
+  - `GET /patients`
+  - `GET /patient/{patient_id}`
+  - `GET /scores`
+- Training job lifecycle endpoints:
+  - `POST /training/start`
+  - `GET /training/jobs`
+  - `GET /training/{job_id}`
+  - `GET /training/{job_id}/progress`
+- LSTM training pipeline for PhysioNet data with run artifacts and metrics output

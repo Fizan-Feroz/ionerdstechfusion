@@ -82,14 +82,6 @@ const modelStats = [
   { label: 'Recall', value: '54.9%', tone: 'warn' },
 ]
 
-const signals = [
-  { name: 'Respiratory Rate', contribution: 34 },
-  { name: 'SpO2 Saturation', contribution: 27 },
-  { name: 'Heart Rate', contribution: 19 },
-  { name: 'Temperature', contribution: 12 },
-  { name: 'Blood Pressure', contribution: 8 },
-]
-
 function Shell({ children }) {
   return (
     <div className="app-shell">
@@ -142,6 +134,43 @@ function Sparkline({ points }) {
   )
 }
 
+function ExplainabilityWaveform({ points }) {
+  const width = 280
+  const height = 86
+  const min = Math.min(...points)
+  const max = Math.max(...points)
+  const scaleX = width / Math.max(1, points.length - 1)
+  const scaleY = (value) => height - ((value - min) / (max - min || 1)) * height
+  const path = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${index * scaleX} ${scaleY(point)}`).join(' ')
+
+  const explainBand = (value) => {
+    if (value >= 80) return { label: 'SpO2 drop pattern', tone: 'spo2' }
+    if (value >= 65) return { label: 'Respiratory strain', tone: 'resp' }
+    if (value >= 45) return { label: 'Cardiac stress', tone: 'hr' }
+    return { label: 'Thermal/inflammatory drift', tone: 'temp' }
+  }
+
+  return (
+    <div className="explainability-waveform">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Explainability overlay waveform">
+        <path d={path} className="wave-line" />
+        {points.map((point, index) => {
+          const x = index * scaleX
+          const y = scaleY(point)
+          const band = explainBand(point)
+          return <circle key={`${point}-${index}`} cx={x} cy={y} r="4" className={`wave-dot ${band.tone}`} />
+        })}
+      </svg>
+      <div className="wave-legend">
+        <span className="pill spo2">SpO2-related</span>
+        <span className="pill resp">Resp-related</span>
+        <span className="pill hr">HR-related</span>
+        <span className="pill temp">Temp-related</span>
+      </div>
+    </div>
+  )
+}
+
 function RiskDial({ value }) {
   const normalized = Math.min(100, Math.max(0, value))
   return (
@@ -166,6 +195,92 @@ function statusForRisk(risk) {
   return 'Stable'
 }
 
+function scoreContributions(vitals) {
+  const contributions = [
+    { name: 'Heart Rate', value: (vitals.HR - 85) * 0.24 },
+    { name: 'SpO2 Saturation', value: (92 - vitals.SpO2) * 1.7 },
+    { name: 'Respiratory Rate', value: (vitals.Resp - 18) * 0.6 },
+    { name: 'Temperature', value: (vitals.Temp - 37) * 4.5 },
+  ]
+  const total = contributions.reduce((sum, metric) => sum + metric.value, 0)
+  return {
+    total,
+    metrics: contributions.map((metric) => ({
+      ...metric,
+      points: Number((metric.value * 0.05).toFixed(2)),
+    })),
+  }
+}
+
+function buildAlerts(patients) {
+  const alerts = []
+  patients.forEach((patient) => {
+    if (patient.risk >= 90) {
+      alerts.push({ level: 'critical', text: `Patient ${patient.patient_id} at ${patient.risk}% risk - immediate bedside review needed.` })
+      return
+    }
+    if (patient.vitals.SpO2 <= 88) {
+      alerts.push({ level: 'warning', text: `Patient ${patient.patient_id} has low SpO2 (${patient.vitals.SpO2}%).` })
+    }
+    if (patient.vitals.Resp >= 30) {
+      alerts.push({ level: 'warning', text: `Patient ${patient.patient_id} respiratory rate elevated (${patient.vitals.Resp}/min).` })
+    }
+    if (patient.vitals.Temp >= 39) {
+      alerts.push({ level: 'info', text: `Patient ${patient.patient_id} temperature trend suggests infection (${patient.vitals.Temp} C).` })
+    }
+  })
+  return alerts.slice(0, 5)
+}
+
+function calculateNews2(patient) {
+  let score = 0
+  const { HR, Resp, Temp, SpO2 } = patient.vitals
+  if (Resp <= 8 || Resp >= 25) score += 3
+  else if (Resp >= 21) score += 2
+  else if (Resp >= 9 && Resp <= 11) score += 1
+
+  if (SpO2 <= 91) score += 3
+  else if (SpO2 <= 93) score += 2
+  else if (SpO2 <= 95) score += 1
+
+  if (Temp <= 35) score += 3
+  else if (Temp >= 39.1) score += 2
+  else if (Temp >= 38.1) score += 1
+
+  if (HR <= 40 || HR >= 131) score += 3
+  else if (HR >= 111) score += 2
+  else if (HR >= 91 || HR <= 50) score += 1
+  return score
+}
+
+function hasDeteriorationEvent(patient) {
+  return patient.vitals.SpO2 <= 90 || patient.vitals.Resp >= 30 || patient.vitals.Temp >= 39.2 || patient.risk >= 88
+}
+
+function classificationStats(rows) {
+  const totals = rows.reduce(
+    (acc, row) => {
+      if (row.predicted && row.actual) acc.tp += 1
+      else if (row.predicted && !row.actual) acc.fp += 1
+      else if (!row.predicted && row.actual) acc.fn += 1
+      else acc.tn += 1
+      return acc
+    },
+    { tp: 0, fp: 0, tn: 0, fn: 0 }
+  )
+
+  const sensitivity = totals.tp + totals.fn ? totals.tp / (totals.tp + totals.fn) : 0
+  const specificity = totals.tn + totals.fp ? totals.tn / (totals.tn + totals.fp) : 0
+  const precision = totals.tp + totals.fp ? totals.tp / (totals.tp + totals.fp) : 0
+
+  return {
+    ...totals,
+    sensitivity: Number((sensitivity * 100).toFixed(1)),
+    specificity: Number((specificity * 100).toFixed(1)),
+    precision: Number((precision * 100).toFixed(1)),
+  }
+}
+
 function updatePatient(patient, scenarioProfile, scenarioLead) {
   const randomizer = scenarioProfile.volatility
   const nextVitals = {
@@ -175,13 +290,9 @@ function updatePatient(patient, scenarioProfile, scenarioLead) {
     Temp: Number(clamp(patient.vitals.Temp + scenarioProfile.temp * 0.12 + randomCentered(randomizer * 0.03), 34.5, 41).toFixed(1)),
   }
 
-  const signalDelta =
-    (nextVitals.HR - 85) * 0.24 +
-    (92 - nextVitals.SpO2) * 1.7 +
-    (nextVitals.Resp - 18) * 0.6 +
-    (nextVitals.Temp - 37) * 4.5
+  const contributionData = scoreContributions(nextVitals)
 
-  const nextRisk = Math.round(clamp(patient.risk + scenarioProfile.riskDrift * 0.35 + signalDelta * 0.05 + randomCentered(randomizer), 8, 99))
+  const nextRisk = Math.round(clamp(patient.risk + scenarioProfile.riskDrift * 0.35 + contributionData.total * 0.05 + randomCentered(randomizer), 8, 99))
   const previousRisk = patient.risk
   const riskChange = nextRisk - previousRisk
   const trend = `${riskChange >= 0 ? '+' : ''}${riskChange}`
@@ -201,11 +312,47 @@ function Dashboard() {
   const [activeScenario, setActiveScenario] = useState('baseline')
   const [patientQueue, setPatientQueue] = useState(BASE_PATIENTS)
   const [lastUpdated, setLastUpdated] = useState(new Date())
-  const [isPaused, setIsPaused] = useState(false)
+  const [isPaused, setIsPaused] = useState(true)
+  const [selectedPatientId, setSelectedPatientId] = useState(BASE_PATIENTS[0].patient_id)
+  const [alertThreshold, setAlertThreshold] = useState(75)
 
   const scenarioEntries = useMemo(() => Object.entries(SCENARIOS), [])
   const criticalCount = patientQueue.filter((patient) => patient.risk >= 75).length
   const activeScenarioLabel = SCENARIOS[activeScenario].label
+  const alertItems = useMemo(() => buildAlerts(patientQueue), [patientQueue])
+  const selectedPatient = patientQueue.find((patient) => patient.patient_id === selectedPatientId) || patientQueue[0]
+  const impactMetrics = selectedPatient ? scoreContributions(selectedPatient.vitals).metrics : []
+  const currentNews2 = selectedPatient ? calculateNews2(selectedPatient) : 0
+
+  const modelRows = useMemo(
+    () =>
+      patientQueue.map((patient) => ({
+        actual: hasDeteriorationEvent(patient),
+        predicted: patient.risk >= alertThreshold,
+      })),
+    [patientQueue, alertThreshold]
+  )
+  const news2Rows = useMemo(
+    () =>
+      patientQueue.map((patient) => ({
+        actual: hasDeteriorationEvent(patient),
+        predicted: calculateNews2(patient) >= 7,
+      })),
+    [patientQueue]
+  )
+
+  const modelPerf = useMemo(() => classificationStats(modelRows), [modelRows])
+  const news2Perf = useMemo(() => classificationStats(news2Rows), [news2Rows])
+  const averageLeadTime = useMemo(() => {
+    const lead = patientQueue.map((patient) => clamp((100 - patient.risk) / 12, 0.5, 6))
+    return (lead.reduce((sum, val) => sum + val, 0) / lead.length).toFixed(1)
+  }, [patientQueue])
+
+  useEffect(() => {
+    if (!patientQueue.some((patient) => patient.patient_id === selectedPatientId)) {
+      setSelectedPatientId(patientQueue[0]?.patient_id)
+    }
+  }, [patientQueue, selectedPatientId])
 
   useEffect(() => {
     if (isPaused) return undefined
@@ -214,14 +361,14 @@ function Dashboard() {
       const { profile, lead } = SCENARIOS[activeScenario]
       setPatientQueue((current) => current.map((patient) => updatePatient(patient, profile, lead)))
       setLastUpdated(new Date())
-    }, 1500)
+    }, 1000)
     return () => window.clearInterval(intervalId)
   }, [activeScenario, isPaused])
 
   const handleResetSimulation = () => {
     setPatientQueue(BASE_PATIENTS)
     setActiveScenario('baseline')
-    setIsPaused(false)
+    setIsPaused(true)
     setLastUpdated(new Date())
   }
 
@@ -288,7 +435,7 @@ function Dashboard() {
               className="scenario-button action"
               onClick={() => setIsPaused((current) => !current)}
             >
-              {isPaused ? 'Resume Simulation' : 'Pause Simulation'}
+              {isPaused ? 'Start Simulation' : 'Pause Simulation'}
             </button>
             <button
               type="button"
@@ -299,6 +446,81 @@ function Dashboard() {
             </button>
           </div>
         </div>
+      </section>
+
+      <section className="alerts-panel" aria-label="Real-time alerts">
+        <div className="panel-heading compact">
+          <h2>Live Alerts</h2>
+          <span className="model-badge">{alertItems.length} active</span>
+        </div>
+        {alertItems.length === 0 ? (
+          <p className="alerts-empty">No threshold breaches. Monitoring continues.</p>
+        ) : (
+          <div className="alerts-list">
+            {alertItems.map((alert, idx) => (
+              <article key={`${alert.text}-${idx}`} className={`alert-item ${alert.level}`}>
+                {alert.text}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="analytics-grid" aria-label="Model analytics and threshold tuning">
+        <article className="panel analytics-panel">
+          <div className="panel-heading compact">
+            <h2>Threshold Tuning</h2>
+            <span className="model-badge">Alert {'>='} {alertThreshold}</span>
+          </div>
+          <label className="slider-label" htmlFor="alert-threshold">
+            Risk threshold ({alertThreshold})
+          </label>
+          <input
+            id="alert-threshold"
+            type="range"
+            min="50"
+            max="95"
+            step="1"
+            value={alertThreshold}
+            onChange={(event) => setAlertThreshold(Number(event.target.value))}
+          />
+          <div className="metric-grid tuning">
+            <div className="metric-card good">
+              <span>Sensitivity</span>
+              <strong>{modelPerf.sensitivity}%</strong>
+            </div>
+            <div className="metric-card good">
+              <span>Specificity</span>
+              <strong>{modelPerf.specificity}%</strong>
+            </div>
+            <div className="metric-card">
+              <span>Precision</span>
+              <strong>{modelPerf.precision}%</strong>
+            </div>
+            <div className="metric-card">
+              <span>False alarms</span>
+              <strong>{modelPerf.fp}</strong>
+            </div>
+          </div>
+        </article>
+
+        <article className="panel analytics-panel">
+          <div className="panel-heading compact">
+            <h2>NEWS2 Baseline vs Model</h2>
+            <span className="model-badge">Lead time {averageLeadTime}h</span>
+          </div>
+          <div className="compare-grid">
+            <div>
+              <h3>AI Model</h3>
+              <p>Sensitivity {modelPerf.sensitivity}% | Specificity {modelPerf.specificity}%</p>
+            </div>
+            <div>
+                <h3>NEWS2 ({'>='}7)</h3>
+              <p>Sensitivity {news2Perf.sensitivity}% | Specificity {news2Perf.specificity}%</p>
+            </div>
+          </div>
+          <small className="timestamp">Selected patient NEWS2 score: {currentNews2}</small>
+        </article>
       </section>
 
       <section className="dashboard-grid">
@@ -331,6 +553,13 @@ function Dashboard() {
                   <small>{patient.trend} trend</small>
                 </div>
                 <div className="lead-signal">{patient.lead}</div>
+                <button
+                  type="button"
+                  className={`inspect-button ${selectedPatientId === patient.patient_id ? 'active' : ''}`}
+                  onClick={() => setSelectedPatientId(patient.patient_id)}
+                >
+                  Inspect impact
+                </button>
               </article>
             ))}
           </div>
@@ -352,16 +581,17 @@ function Dashboard() {
 
           <div className="divider" />
 
-          <h3>Top Risk Contributors</h3>
+          <h3>Risk Impact - Patient {selectedPatient?.patient_id}</h3>
+          <ExplainabilityWaveform points={selectedPatient?.waveform || []} />
           <div className="signal-list">
-            {signals.map((signal) => (
-              <div className="signal-row" key={signal.name}>
+            {impactMetrics.map((metric) => (
+              <div className="signal-row" key={metric.name}>
                 <div>
-                  <span>{signal.name}</span>
-                  <small>{signal.contribution}% contribution</small>
+                  <span>{metric.name}</span>
+                  <small>{metric.points >= 0 ? '+' : ''}{metric.points} risk points</small>
                 </div>
-                <div className="bar-track">
-                  <span style={{ width: `${signal.contribution}%` }} />
+                <div className={`bar-track impact ${metric.points >= 0 ? 'up' : 'down'}`}>
+                  <span style={{ width: `${Math.min(100, Math.abs(metric.value) * 10)}%` }} />
                 </div>
               </div>
             ))}
