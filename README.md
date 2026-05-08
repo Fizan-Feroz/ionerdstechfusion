@@ -1,7 +1,7 @@
 # ionerdstechfusion
 
-Repository for Techfusion project.
+IONERDS ASSEMBLE!!!!!!!!!!!!!!
 
-## Setup
+## INFORMATION
 
-- Overview and instructions will go here.
+- FAILURE NOT ACCEPTED
