@@ -44,13 +44,15 @@ def save_model(model, path):
     torch.save(model.state_dict(), path)
 
 
-def evaluate_model(model, X, y, batch_size=4096):
+def evaluate_model(model, X, y, batch_size=4096, device=None):
+    if device is None:
+        device = next(model.parameters()).device
     model.eval()
     probs_batches = []
     with torch.no_grad():
         for start in range(0, len(X), batch_size):
-            xb = torch.tensor(X[start:start + batch_size], dtype=torch.float32)
-            probs_batches.append(model(xb).numpy())
+            xb = torch.tensor(X[start:start + batch_size], dtype=torch.float32).to(device)
+            probs_batches.append(model(xb).detach().cpu().numpy())
     probs = np.concatenate(probs_batches)
     auc = roc_auc_score(y, probs) if len(np.unique(y)) > 1 else float('nan')
     preds = (probs > 0.5).astype(int)

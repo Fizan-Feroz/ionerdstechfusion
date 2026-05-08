@@ -13,6 +13,68 @@ const modelStats = [
   { label: 'Recall', value: '54.9%', tone: 'warn' },
 ]
 
+function MiniIcon({ name }) {
+  const common = {
+    className: `mini-icon ${name}`,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    xmlns: 'http://www.w3.org/2000/svg',
+    'aria-hidden': true,
+  }
+
+  switch (name) {
+    case 'heart':
+      return (
+        <svg {...common}>
+          <path d="M12 21s-7-4.7-9.5-9C.6 8.2 2.4 5 6 5c1.9 0 3.1 1 4 2.2C11 6 12.2 5 14 5c3.6 0 5.4 3.2 3.5 7-2.5 4.3-9.5 9-9.5 9Z" stroke="currentColor" strokeWidth="1.8" />
+        </svg>
+      )
+    case 'droplet':
+      return (
+        <svg {...common}>
+          <path d="M12 2s6 7 6 12a6 6 0 0 1-12 0c0-5 6-12 6-12Z" stroke="currentColor" strokeWidth="1.8" />
+        </svg>
+      )
+    case 'lungs':
+      return (
+        <svg {...common}>
+          <path d="M12 4v6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M12 10c-2.7 0-5.5 2.1-6.6 5.2C4.5 17.6 6 20 8.7 20c1.7 0 2.8-1 3.3-2.4.5 1.4 1.6 2.4 3.3 2.4 2.7 0 4.2-2.4 3.3-4.8C17.5 12.1 14.7 10 12 10Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+        </svg>
+      )
+    case 'thermo':
+      return (
+        <svg {...common}>
+          <path d="M10 14.8V6.5a2 2 0 1 1 4 0v8.3a4 4 0 1 1-4 0Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+          <path d="M12 17.5a1.2 1.2 0 1 0 0-2.4 1.2 1.2 0 0 0 0 2.4Z" fill="currentColor" />
+        </svg>
+      )
+    case 'alert':
+      return (
+        <svg {...common}>
+          <path d="M12 3 2.6 20h18.8L12 3Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+          <path d="M12 9v5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M12 17h.01" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+        </svg>
+      )
+    case 'sliders':
+      return (
+        <svg {...common}>
+          <path d="M6 21v-7M6 10V3M12 21v-3M12 14V3M18 21v-9M18 8V3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M4 14h4M10 14h4M16 12h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      )
+    case 'baseline':
+      return (
+        <svg {...common}>
+          <path d="M3 16h5l2-6 3 10 2-6h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )
+    default:
+      return null
+  }
+}
+
 function Shell({ children }) {
   return (
     <div className="app-shell">
@@ -271,22 +333,22 @@ function Dashboard() {
 
       <section className="summary-grid" aria-label="Operational summary">
         <article className="summary-tile danger">
-          <span>High acuity</span>
+          <span className="tile-label"><MiniIcon name="alert" />High acuity</span>
           <strong>{criticalCount}</strong>
           <small>patients need review</small>
         </article>
         <article className="summary-tile">
-          <span>Patients tracked</span>
+          <span className="tile-label"><MiniIcon name="baseline" />Patients tracked</span>
           <strong>24</strong>
           <small>across ICU beds</small>
         </article>
         <article className="summary-tile">
-          <span>Average lead time</span>
+          <span className="tile-label"><MiniIcon name="sliders" />Average lead time</span>
           <strong>3.4h</strong>
           <small>before deterioration</small>
         </article>
         <article className="summary-tile">
-          <span>False alarm rate</span>
+          <span className="tile-label"><MiniIcon name="alert" />False alarm rate</span>
           <strong>11.2%</strong>
           <small>NEWS2 benchmark</small>
         </article>
@@ -334,7 +396,7 @@ function Dashboard() {
 
       <section className="alerts-panel" aria-label="Real-time alerts">
         <div className="panel-heading compact">
-          <h2>Live Alerts</h2>
+          <h2 className="heading-with-icon"><MiniIcon name="alert" />Live Alerts</h2>
           <span className="model-badge">{alertItems.length} active</span>
         </div>
         {alertItems.length === 0 ? (
@@ -353,7 +415,7 @@ function Dashboard() {
       <section className="analytics-grid" aria-label="Model analytics and threshold tuning">
         <article className="panel analytics-panel">
           <div className="panel-heading compact">
-            <h2>Threshold Tuning</h2>
+            <h2 className="heading-with-icon"><MiniIcon name="sliders" />Threshold Tuning</h2>
             <span className="model-badge">Alert {'>='} {alertThreshold}</span>
           </div>
           <label className="slider-label" htmlFor="alert-threshold">
@@ -390,7 +452,7 @@ function Dashboard() {
 
         <article className="panel analytics-panel">
           <div className="panel-heading compact">
-            <h2>NEWS2 Baseline vs Model</h2>
+            <h2 className="heading-with-icon"><MiniIcon name="baseline" />NEWS2 Baseline vs Model</h2>
             <span className="model-badge">Lead time {averageLeadTime}h</span>
           </div>
           <div className="compare-grid">
@@ -427,10 +489,10 @@ function Dashboard() {
                 </div>
                 <Sparkline points={patient.waveform} />
                 <div className="vital-strip" aria-label={`Vitals for patient ${patient.patient_id}`}>
-                  <span>HR <b>{patient.vitals.HR}</b></span>
-                  <span>SpO2 <b>{patient.vitals.SpO2}</b></span>
-                  <span>RR <b>{patient.vitals.Resp}</b></span>
-                  <span>T <b>{patient.vitals.Temp}</b></span>
+                  <span><span className="vital-label"><MiniIcon name="heart" />HR</span> <b>{patient.vitals.HR}</b></span>
+                  <span><span className="vital-label"><MiniIcon name="droplet" />SpO2</span> <b>{patient.vitals.SpO2}</b></span>
+                  <span><span className="vital-label"><MiniIcon name="lungs" />RR</span> <b>{patient.vitals.Resp}</b></span>
+                  <span><span className="vital-label"><MiniIcon name="thermo" />T</span> <b>{patient.vitals.Temp}</b></span>
                 </div>
                 <div className="risk-block">
                   <RiskDial value={patient.risk} />
