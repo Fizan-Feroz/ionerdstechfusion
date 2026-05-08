@@ -1,0 +1,250 @@
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import mimicDemoPatients from './mimicDemoPatients.json'
+
+export const BASE_PATIENTS = [
+  {
+    patient_id: '132547',
+    bed: 'ICU-04',
+    status: 'High',
+    risk: 76,
+    trend: '+2',
+    lead: 'Mixed instability',
+    vitals: { HR: 112, SpO2: 91, Resp: 27, Temp: 38.0 },
+    waveform: [56, 60, 58, 61, 64, 62, 66, 69, 68, 71, 74, 76],
+  },
+  {
+    patient_id: '132611',
+    bed: 'ICU-09',
+    status: 'Watch',
+    risk: 63,
+    trend: '+1',
+    lead: 'Hemodynamic watch',
+    vitals: { HR: 96, SpO2: 94, Resp: 22, Temp: 37.6 },
+    waveform: [44, 47, 45, 49, 52, 50, 53, 57, 58, 60, 61, 63],
+  },
+  {
+    patient_id: '132590',
+    bed: 'ICU-12',
+    status: 'Watch',
+    risk: 52,
+    trend: '+0',
+    lead: 'Early inflammatory signal',
+    vitals: { HR: 90, SpO2: 95, Resp: 21, Temp: 37.5 },
+    waveform: [36, 38, 39, 37, 41, 40, 43, 44, 45, 48, 49, 52],
+  },
+  {
+    patient_id: '132539',
+    bed: 'ICU-02',
+    status: 'Stable',
+    risk: 31,
+    trend: '-1',
+    lead: 'Baseline recovery',
+    vitals: { HR: 75, SpO2: 97, Resp: 18, Temp: 36.7 },
+    waveform: [38, 37, 35, 36, 33, 34, 32, 31, 30, 32, 30, 31],
+  },
+]
+
+const DEFAULT_PATIENTS = Array.isArray(mimicDemoPatients) && mimicDemoPatients.length >= 12
+  ? mimicDemoPatients.slice(0, 12)
+  : BASE_PATIENTS
+
+export const SCENARIOS = {
+  baseline: {
+    label: 'Baseline Mix',
+    lead: 'Mixed instability',
+    profile: { hr: 0, spo2: 0, resp: 0, temp: 0, riskDrift: 0, volatility: 1.5 },
+  },
+  respiratory: {
+    label: 'Respiratory Decline',
+    lead: 'Respiratory decline',
+    profile: { hr: 4, spo2: -3, resp: 5, temp: 0.3, riskDrift: 4, volatility: 2.5 },
+  },
+  septic: {
+    label: 'Septic Shock',
+    lead: 'Sepsis escalation',
+    profile: { hr: 8, spo2: -2, resp: 4, temp: 0.8, riskDrift: 6, volatility: 3 },
+  },
+  cardiac: {
+    label: 'Cardiac Stress',
+    lead: 'Arrhythmic stress',
+    profile: { hr: 11, spo2: -1, resp: 2, temp: 0.2, riskDrift: 5, volatility: 4 },
+  },
+  recovery: {
+    label: 'Recovery Trend',
+    lead: 'Clinical recovery',
+    profile: { hr: -5, spo2: 2, resp: -3, temp: -0.4, riskDrift: -5, volatility: 1.2 },
+  },
+}
+
+const SimulationContext = createContext(null)
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value))
+}
+
+function randomCentered(scale) {
+  return (Math.random() * 2 - 1) * scale
+}
+
+function randomPick(items) {
+  return items[Math.floor(Math.random() * items.length)]
+}
+
+function assignTrajectory() {
+  const roll = Math.random()
+  if (roll < 0.27) return 'severe'
+  if (roll < 0.52) return 'recovery'
+  if (roll < 0.78) return 'stable'
+  return 'volatile'
+}
+
+function trajectoryProfile(trajectory) {
+  switch (trajectory) {
+    case 'severe':
+      return { hr: 7, spo2: -3, resp: 5, temp: 0.4, riskDrift: 7, volatility: 2.6, lead: 'Multi-organ deterioration' }
+    case 'recovery':
+      return { hr: -4, spo2: 2, resp: -3, temp: -0.3, riskDrift: -6, volatility: 1.4, lead: 'Clinical improvement' }
+    case 'volatile':
+      return { hr: 3, spo2: -1, resp: 2, temp: 0.1, riskDrift: 1, volatility: 4.2, lead: 'Unstable oscillations' }
+    case 'stable':
+    default:
+      return { hr: 0, spo2: 0, resp: 0, temp: 0, riskDrift: 0, volatility: 1.2, lead: 'Stable monitoring' }
+  }
+}
+
+function seedIcuEnvironment(patients) {
+  const beds = patients.map((p) => p.bed)
+  const takenBeds = new Set()
+
+  return patients.map((patient, index) => {
+    const trajectory = assignTrajectory()
+    const profile = trajectoryProfile(trajectory)
+
+    // Ensure beds remain unique even if upstream data repeats.
+    let bed = patient.bed || `ICU-${index + 1}`
+    if (takenBeds.has(bed)) {
+      bed = randomPick(beds.filter((b) => b && !takenBeds.has(b))) || `ICU-${String(index + 1).padStart(2, '0')}`
+    }
+    takenBeds.add(bed)
+
+    const baselineRisk = clamp(
+      trajectory === 'severe' ? patient.risk + 18 : trajectory === 'recovery' ? patient.risk - 10 : patient.risk,
+      8,
+      95
+    )
+
+    return {
+      ...patient,
+      bed,
+      risk: Math.round(baselineRisk),
+      trend: '+0',
+      lead: profile.lead,
+      trajectory,
+      waveform: [...patient.waveform.slice(0, -1), Math.round(baselineRisk)],
+    }
+  })
+}
+
+function scoreContributions(vitals) {
+  return (
+    (vitals.HR - 85) * 0.24 +
+    (92 - vitals.SpO2) * 1.7 +
+    (vitals.Resp - 18) * 0.6 +
+    (vitals.Temp - 37) * 4.5
+  )
+}
+
+function statusForRisk(risk) {
+  if (risk >= 85) return 'Critical'
+  if (risk >= 70) return 'High'
+  if (risk >= 45) return 'Watch'
+  return 'Stable'
+}
+
+function updatePatient(patient, scenarioProfile, scenarioLead) {
+  const trajectory = patient.trajectory || 'stable'
+  const traj = trajectoryProfile(trajectory)
+  const randomizer = Math.max(0.8, (scenarioProfile.volatility + traj.volatility) / 2)
+
+  const combined = {
+    hr: scenarioProfile.hr + traj.hr,
+    spo2: scenarioProfile.spo2 + traj.spo2,
+    resp: scenarioProfile.resp + traj.resp,
+    temp: scenarioProfile.temp + traj.temp,
+    riskDrift: scenarioProfile.riskDrift + traj.riskDrift,
+  }
+
+  const nextVitals = {
+    HR: Math.round(clamp(patient.vitals.HR + combined.hr * 0.35 + randomCentered(randomizer), 45, 170)),
+    SpO2: Math.round(clamp(patient.vitals.SpO2 + combined.spo2 * 0.25 + randomCentered(randomizer * 0.35), 75, 100)),
+    Resp: Math.round(clamp(patient.vitals.Resp + combined.resp * 0.25 + randomCentered(randomizer * 0.4), 10, 42)),
+    Temp: Number(clamp(patient.vitals.Temp + combined.temp * 0.12 + randomCentered(randomizer * 0.03), 34.5, 41).toFixed(1)),
+  }
+
+  const nextRisk = Math.round(
+    clamp(
+      patient.risk + combined.riskDrift * 0.35 + scoreContributions(nextVitals) * 0.05 + randomCentered(randomizer),
+      8,
+      99
+    )
+  )
+  const riskChange = nextRisk - patient.risk
+
+  return {
+    ...patient,
+    risk: nextRisk,
+    trend: `${riskChange >= 0 ? '+' : ''}${riskChange}`,
+    status: statusForRisk(nextRisk),
+    lead: nextRisk < 45 ? 'Baseline recovery' : patient.trajectory === 'recovery' ? traj.lead : scenarioLead,
+    vitals: nextVitals,
+    waveform: [...patient.waveform.slice(1), nextRisk],
+  }
+}
+
+export function SimulationProvider({ children }) {
+  const [activeScenario, setActiveScenario] = useState('baseline')
+  const [patientQueue, setPatientQueue] = useState(() => seedIcuEnvironment(DEFAULT_PATIENTS))
+  const [lastUpdated, setLastUpdated] = useState(new Date())
+  const [isPaused, setIsPaused] = useState(true)
+
+  useEffect(() => {
+    if (isPaused) return undefined
+
+    const intervalId = window.setInterval(() => {
+      const { profile, lead } = SCENARIOS[activeScenario]
+      setPatientQueue((current) => current.map((patient) => updatePatient(patient, profile, lead)))
+      setLastUpdated(new Date())
+    }, 1000)
+    return () => window.clearInterval(intervalId)
+  }, [activeScenario, isPaused])
+
+  const value = useMemo(
+    () => ({
+      activeScenario,
+      activeScenarioLabel: SCENARIOS[activeScenario].label,
+      scenarioEntries: Object.entries(SCENARIOS),
+      patientQueue,
+      lastUpdated,
+      isPaused,
+      setActiveScenario,
+      toggleSimulation: () => setIsPaused((current) => !current),
+      resetSimulation: () => {
+        setPatientQueue(seedIcuEnvironment(DEFAULT_PATIENTS))
+        setActiveScenario('baseline')
+        setIsPaused(true)
+        setLastUpdated(new Date())
+      },
+    }),
+    [activeScenario, patientQueue, lastUpdated, isPaused]
+  )
+
+  return <SimulationContext.Provider value={value}>{children}</SimulationContext.Provider>
+}
+
+export function useSimulation() {
+  const context = useContext(SimulationContext)
+  if (!context) {
+    throw new Error('useSimulation must be used within SimulationProvider')
+  }
+  return context
+}

@@ -1,0 +1,266 @@
+[
+  {
+    "patient_id": "33281088",
+    "bed": "ICU-01",
+    "status": "Watch",
+    "risk": 30,
+    "trend": "+0",
+    "lead": "MIMIC baseline",
+    "vitals": {
+      "HR": 74,
+      "SpO2": 96,
+      "Resp": 18,
+      "Temp": 36.8
+    },
+    "waveform": [
+      24,
+      26,
+      27,
+      28,
+      29,
+      30
+    ]
+  },
+  {
+    "patient_id": "32359580",
+    "bed": "ICU-02",
+    "status": "Watch",
+    "risk": 40,
+    "trend": "+0",
+    "lead": "MIMIC baseline",
+    "vitals": {
+      "HR": 106,
+      "SpO2": 96,
+      "Resp": 23,
+      "Temp": 34.8
+    },
+    "waveform": [
+      34,
+      36,
+      37,
+      38,
+      39,
+      40
+    ]
+  },
+  {
+    "patient_id": "31316840",
+    "bed": "ICU-03",
+    "status": "Watch",
+    "risk": 30,
+    "trend": "+0",
+    "lead": "MIMIC baseline",
+    "vitals": {
+      "HR": 74,
+      "SpO2": 96,
+      "Resp": 19,
+      "Temp": 36.8
+    },
+    "waveform": [
+      24,
+      26,
+      27,
+      28,
+      29,
+      30
+    ]
+  },
+  {
+    "patient_id": "38197705",
+    "bed": "ICU-04",
+    "status": "Watch",
+    "risk": 30,
+    "trend": "+0",
+    "lead": "MIMIC baseline",
+    "vitals": {
+      "HR": 100,
+      "SpO2": 96,
+      "Resp": 24,
+      "Temp": 36.8
+    },
+    "waveform": [
+      24,
+      26,
+      27,
+      28,
+      29,
+      30
+    ]
+  },
+  {
+    "patient_id": "38383343",
+    "bed": "ICU-05",
+    "status": "Watch",
+    "risk": 30,
+    "trend": "+0",
+    "lead": "MIMIC baseline",
+    "vitals": {
+      "HR": 101,
+      "SpO2": 96,
+      "Resp": 19,
+      "Temp": 36.8
+    },
+    "waveform": [
+      24,
+      26,
+      27,
+      28,
+      29,
+      30
+    ]
+  },
+  {
+    "patient_id": "32128372",
+    "bed": "ICU-06",
+    "status": "Watch",
+    "risk": 45,
+    "trend": "+0",
+    "lead": "MIMIC baseline",
+    "vitals": {
+      "HR": 117,
+      "SpO2": 97,
+      "Resp": 16,
+      "Temp": 36.8
+    },
+    "waveform": [
+      39,
+      41,
+      42,
+      43,
+      44,
+      45
+    ]
+  },
+  {
+    "patient_id": "37293400",
+    "bed": "ICU-07",
+    "status": "Watch",
+    "risk": 30,
+    "trend": "+0",
+    "lead": "MIMIC baseline",
+    "vitals": {
+      "HR": 91,
+      "SpO2": 96,
+      "Resp": 20,
+      "Temp": 36.8
+    },
+    "waveform": [
+      24,
+      26,
+      27,
+      28,
+      29,
+      30
+    ]
+  },
+  {
+    "patient_id": "30932571",
+    "bed": "ICU-08",
+    "status": "Watch",
+    "risk": 45,
+    "trend": "+0",
+    "lead": "MIMIC baseline",
+    "vitals": {
+      "HR": 118,
+      "SpO2": 96,
+      "Resp": 18,
+      "Temp": 36.8
+    },
+    "waveform": [
+      39,
+      41,
+      42,
+      43,
+      44,
+      45
+    ]
+  },
+  {
+    "patient_id": "30955999",
+    "bed": "ICU-09",
+    "status": "Watch",
+    "risk": 45,
+    "trend": "+0",
+    "lead": "MIMIC baseline",
+    "vitals": {
+      "HR": 111,
+      "SpO2": 96,
+      "Resp": 26,
+      "Temp": 36.8
+    },
+    "waveform": [
+      39,
+      41,
+      42,
+      43,
+      44,
+      45
+    ]
+  },
+  {
+    "patient_id": "32391858",
+    "bed": "ICU-10",
+    "status": "Watch",
+    "risk": 30,
+    "trend": "+0",
+    "lead": "MIMIC baseline",
+    "vitals": {
+      "HR": 89,
+      "SpO2": 96,
+      "Resp": 17,
+      "Temp": 36.8
+    },
+    "waveform": [
+      24,
+      26,
+      27,
+      28,
+      29,
+      30
+    ]
+  },
+  {
+    "patient_id": "34531557",
+    "bed": "ICU-11",
+    "status": "Watch",
+    "risk": 30,
+    "trend": "+0",
+    "lead": "MIMIC baseline",
+    "vitals": {
+      "HR": 80,
+      "SpO2": 96,
+      "Resp": 18,
+      "Temp": 36.8
+    },
+    "waveform": [
+      24,
+      26,
+      27,
+      28,
+      29,
+      30
+    ]
+  },
+  {
+    "patient_id": "39635619",
+    "bed": "ICU-12",
+    "status": "Watch",
+    "risk": 30,
+    "trend": "+0",
+    "lead": "MIMIC baseline",
+    "vitals": {
+      "HR": 93,
+      "SpO2": 96,
+      "Resp": 19,
+      "Temp": 36.8
+    },
+    "waveform": [
+      24,
+      26,
+      27,
+      28,
+      29,
+      30
+    ]
+  }
+]
