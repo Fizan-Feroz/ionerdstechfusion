@@ -1,5 +1,6 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
+import syncuraLogo from '../assets/syncura-logo.png'
 
 export default function WelcomePage() {
   return (
@@ -8,32 +9,7 @@ export default function WelcomePage() {
       <nav className="welcome-nav">
         <div className="welcome-nav-content">
           <Link to="/" className="welcome-logo">
-            <svg viewBox="0 0 48 48" width="32" height="32" fill="none">
-              {/* Heart outline */}
-              <path
-                d="M24 40C10 32 4 26 4 18c0-6 4-10 8-10 2.5 0 5 1.2 6 2.8C19 8 21.5 7 24 7c2.5 0 5 1 6 3.8 1-1.6 3.5-2.8 6-2.8 4 0 8 4 8 10 0 8-6 14-20 22Z"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              {/* ECG waveform inside heart */}
-              <path
-                d="M8 18h4l2-4 2 8 2-4h4"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              {/* Monitoring connection points on right */}
-              <circle cx="32" cy="12" r="1.8" stroke="currentColor" strokeWidth="1.4" fill="none" />
-              <circle cx="32" cy="20" r="1.8" stroke="currentColor" strokeWidth="1.4" fill="none" />
-              <circle cx="32" cy="28" r="1.8" stroke="currentColor" strokeWidth="1.4" fill="none" />
-              {/* Connection lines */}
-              <line x1="28" y1="12" x2="30.2" y2="12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-              <line x1="28" y1="20" x2="30.2" y2="20" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-              <line x1="28" y1="28" x2="30.2" y2="28" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-            </svg>
+            <img src={syncuraLogo} alt="SynCura logo" className="welcome-logo-icon" />
             <span className="welcome-brand-name">SynCura</span>
           </Link>
           <div className="welcome-nav-links">
