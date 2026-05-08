@@ -98,3 +98,43 @@ curl http://localhost:8000/scores
   ]
 }
 ```
+
+Frontend Live Simulation
+------------------------
+
+Run the dashboard locally:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173/`.
+
+Dashboard simulation controls (on the main page):
+- Scenario buttons: `Baseline Mix`, `Respiratory Decline`, `Septic Shock`, `Cardiac Stress`, `Recovery Trend`
+- `Pause Simulation` / `Resume Simulation`
+- `Reset to Baseline`
+
+The simulation updates vitals and risk scores in real time and refreshes the "Updated" timestamp automatically.
+
+Troubleshooting Frontend Startup
+--------------------------------
+
+If the page does not load or CPU usage spikes:
+
+1. Stop existing dev servers and restart from `frontend`:
+   ```powershell
+   npm run dev -- --host 127.0.0.1 --port 5173
+   ```
+2. Check that port 5173 is free before starting:
+   ```powershell
+   Get-NetTCPConnection -LocalPort 5173 -ErrorAction SilentlyContinue
+   ```
+3. If dependencies are stale:
+   ```powershell
+   npm install
+   npm run build
+   ```
+4. Keep only one Vite dev server running at a time.
