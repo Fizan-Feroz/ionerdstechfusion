@@ -210,7 +210,9 @@ h3 {
   min-height: 42px;
   padding: 0 16px;
   font-weight: 800;
+  border: none;
   border-radius: 8px;
+  cursor: pointer;
 }
 
 .button.primary {
@@ -697,6 +699,56 @@ input[type="range"] {
   background: #18754f;
 }
 
+.sim-feed-page {
+  display: grid;
+  gap: 16px;
+}
+
+.sim-feed-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 12px 14px;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #d7e1e4;
+  border-radius: 8px;
+}
+
+.sim-feed-table-wrap {
+  overflow: auto;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #d7e1e4;
+  border-radius: 8px;
+}
+
+.sim-feed-table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+}
+
+.sim-feed-table th,
+.sim-feed-table td {
+  padding: 10px 12px;
+  font-size: 12px;
+  text-align: left;
+  border-bottom: 1px solid #e1eaed;
+  white-space: nowrap;
+}
+
+.sim-feed-table th {
+  color: #375158;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background: #f4f8fa;
+}
+
+.sim-feed-table tbody tr:hover {
+  background: #f8fcfd;
+}
+
 .explainability-waveform {
   margin-bottom: 12px;
 }
@@ -849,6 +901,11 @@ input[type="range"] {
   .metric-grid,
   .compare-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sim-feed-meta {
+    flex-direction: column;
+    gap: 8px;
   }
 
   .scenario-panel {

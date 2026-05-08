@@ -160,6 +160,7 @@ This section tracks the currently implemented product capabilities end-to-end.
   - `Recovery Trend`
 - Start/Pause simulation control
 - Reset simulation to baseline state
+- Dedicated `Simulated Data` tab for live sensor feed inspection
 
 ### 3) Real-time clinical alerts
 - Live alert stream panel on dashboard
@@ -169,6 +170,15 @@ This section tracks the currently implemented product capabilities end-to-end.
   - Elevated respiratory rate
   - High fever/infection trend
 - Active alert counter in panel header
+
+### 3.1) Simulated data stream tab
+- Route: `/simulated-data`
+- Sidebar navigation entry: `Simulated Data`
+- Shared simulation state with dashboard (same scenario, run/pause state, and updates)
+- Live table with per-patient:
+  - patient ID, bed, status, risk, trend
+  - HR, SpO2, respiratory rate, temperature
+  - lead signal and recent risk window values
 
 ### 4) Explainability and score impact
 - Per-patient "Inspect impact" action from risk list

@@ -3,77 +3,8 @@ import { BrowserRouter, Routes, Route, Link, NavLink } from 'react-router-dom'
 import TrainingConfig from './components/TrainingConfig'
 import TrainingMonitor from './components/TrainingMonitor'
 import TrainingJobsList from './components/TrainingJobsList'
-
-const BASE_PATIENTS = [
-  {
-    patient_id: '132547',
-    bed: 'ICU-04',
-    status: 'High',
-    risk: 76,
-    trend: '+2',
-    lead: 'Mixed instability',
-    vitals: { HR: 112, SpO2: 91, Resp: 27, Temp: 38.0 },
-    waveform: [56, 60, 58, 61, 64, 62, 66, 69, 68, 71, 74, 76],
-  },
-  {
-    patient_id: '132611',
-    bed: 'ICU-09',
-    status: 'Watch',
-    risk: 63,
-    trend: '+1',
-    lead: 'Hemodynamic watch',
-    vitals: { HR: 96, SpO2: 94, Resp: 22, Temp: 37.6 },
-    waveform: [44, 47, 45, 49, 52, 50, 53, 57, 58, 60, 61, 63],
-  },
-  {
-    patient_id: '132590',
-    bed: 'ICU-12',
-    status: 'Watch',
-    risk: 52,
-    trend: '+0',
-    lead: 'Early inflammatory signal',
-    vitals: { HR: 90, SpO2: 95, Resp: 21, Temp: 37.5 },
-    waveform: [36, 38, 39, 37, 41, 40, 43, 44, 45, 48, 49, 52],
-  },
-  {
-    patient_id: '132539',
-    bed: 'ICU-02',
-    status: 'Stable',
-    risk: 31,
-    trend: '-1',
-    lead: 'Baseline recovery',
-    vitals: { HR: 75, SpO2: 97, Resp: 18, Temp: 36.7 },
-    waveform: [38, 37, 35, 36, 33, 34, 32, 31, 30, 32, 30, 31],
-  },
-]
-
-const SCENARIOS = {
-  baseline: {
-    label: 'Baseline Mix',
-    lead: 'Mixed instability',
-    profile: { hr: 0, spo2: 0, resp: 0, temp: 0, riskDrift: 0, volatility: 1.5 },
-  },
-  respiratory: {
-    label: 'Respiratory Decline',
-    lead: 'Respiratory decline',
-    profile: { hr: 4, spo2: -3, resp: 5, temp: 0.3, riskDrift: 4, volatility: 2.5 },
-  },
-  septic: {
-    label: 'Septic Shock',
-    lead: 'Sepsis escalation',
-    profile: { hr: 8, spo2: -2, resp: 4, temp: 0.8, riskDrift: 6, volatility: 3 },
-  },
-  cardiac: {
-    label: 'Cardiac Stress',
-    lead: 'Arrhythmic stress',
-    profile: { hr: 11, spo2: -1, resp: 2, temp: 0.2, riskDrift: 5, volatility: 4 },
-  },
-  recovery: {
-    label: 'Recovery Trend',
-    lead: 'Clinical recovery',
-    profile: { hr: -5, spo2: 2, resp: -3, temp: -0.4, riskDrift: -5, volatility: 1.2 },
-  },
-}
+import SimulatedDataFeed from './components/SimulatedDataFeed'
+import { BASE_PATIENTS, SimulationProvider, useSimulation } from './simulationContext'
 
 const modelStats = [
   { label: 'AUC-ROC', value: '0.938', tone: 'good' },
@@ -98,6 +29,10 @@ function Shell({ children }) {
           <NavLink to="/" end className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
             <span aria-hidden="true">⌁</span>
             Dashboard
+          </NavLink>
+          <NavLink to="/simulated-data" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <span aria-hidden="true">◍</span>
+            Simulated Data
           </NavLink>
           <NavLink to="/training" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
             <span aria-hidden="true">▣</span>
@@ -182,17 +117,6 @@ function RiskDial({ value }) {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value))
-}
-
-function randomCentered(scale) {
-  return (Math.random() * 2 - 1) * scale
-}
-
-function statusForRisk(risk) {
-  if (risk >= 85) return 'Critical'
-  if (risk >= 70) return 'High'
-  if (risk >= 45) return 'Watch'
-  return 'Stable'
 }
 
 function scoreContributions(vitals) {
@@ -281,44 +205,22 @@ function classificationStats(rows) {
   }
 }
 
-function updatePatient(patient, scenarioProfile, scenarioLead) {
-  const randomizer = scenarioProfile.volatility
-  const nextVitals = {
-    HR: Math.round(clamp(patient.vitals.HR + scenarioProfile.hr * 0.35 + randomCentered(randomizer), 45, 170)),
-    SpO2: Math.round(clamp(patient.vitals.SpO2 + scenarioProfile.spo2 * 0.25 + randomCentered(randomizer * 0.35), 75, 100)),
-    Resp: Math.round(clamp(patient.vitals.Resp + scenarioProfile.resp * 0.25 + randomCentered(randomizer * 0.4), 10, 42)),
-    Temp: Number(clamp(patient.vitals.Temp + scenarioProfile.temp * 0.12 + randomCentered(randomizer * 0.03), 34.5, 41).toFixed(1)),
-  }
-
-  const contributionData = scoreContributions(nextVitals)
-
-  const nextRisk = Math.round(clamp(patient.risk + scenarioProfile.riskDrift * 0.35 + contributionData.total * 0.05 + randomCentered(randomizer), 8, 99))
-  const previousRisk = patient.risk
-  const riskChange = nextRisk - previousRisk
-  const trend = `${riskChange >= 0 ? '+' : ''}${riskChange}`
-
-  return {
-    ...patient,
-    risk: nextRisk,
-    trend,
-    status: statusForRisk(nextRisk),
-    lead: nextRisk < 45 ? 'Baseline recovery' : scenarioLead,
-    vitals: nextVitals,
-    waveform: [...patient.waveform.slice(1), nextRisk],
-  }
-}
-
 function Dashboard() {
-  const [activeScenario, setActiveScenario] = useState('baseline')
-  const [patientQueue, setPatientQueue] = useState(BASE_PATIENTS)
-  const [lastUpdated, setLastUpdated] = useState(new Date())
-  const [isPaused, setIsPaused] = useState(true)
+  const {
+    activeScenario,
+    activeScenarioLabel,
+    scenarioEntries,
+    patientQueue,
+    lastUpdated,
+    isPaused,
+    setActiveScenario,
+    toggleSimulation,
+    resetSimulation,
+  } = useSimulation()
   const [selectedPatientId, setSelectedPatientId] = useState(BASE_PATIENTS[0].patient_id)
   const [alertThreshold, setAlertThreshold] = useState(75)
 
-  const scenarioEntries = useMemo(() => Object.entries(SCENARIOS), [])
   const criticalCount = patientQueue.filter((patient) => patient.risk >= 75).length
-  const activeScenarioLabel = SCENARIOS[activeScenario].label
   const alertItems = useMemo(() => buildAlerts(patientQueue), [patientQueue])
   const selectedPatient = patientQueue.find((patient) => patient.patient_id === selectedPatientId) || patientQueue[0]
   const impactMetrics = selectedPatient ? scoreContributions(selectedPatient.vitals).metrics : []
@@ -353,24 +255,6 @@ function Dashboard() {
       setSelectedPatientId(patientQueue[0]?.patient_id)
     }
   }, [patientQueue, selectedPatientId])
-
-  useEffect(() => {
-    if (isPaused) return undefined
-
-    const intervalId = window.setInterval(() => {
-      const { profile, lead } = SCENARIOS[activeScenario]
-      setPatientQueue((current) => current.map((patient) => updatePatient(patient, profile, lead)))
-      setLastUpdated(new Date())
-    }, 1000)
-    return () => window.clearInterval(intervalId)
-  }, [activeScenario, isPaused])
-
-  const handleResetSimulation = () => {
-    setPatientQueue(BASE_PATIENTS)
-    setActiveScenario('baseline')
-    setIsPaused(true)
-    setLastUpdated(new Date())
-  }
 
   return (
     <Shell>
@@ -433,14 +317,14 @@ function Dashboard() {
             <button
               type="button"
               className="scenario-button action"
-              onClick={() => setIsPaused((current) => !current)}
+              onClick={toggleSimulation}
             >
               {isPaused ? 'Start Simulation' : 'Pause Simulation'}
             </button>
             <button
               type="button"
               className="scenario-button action"
-              onClick={handleResetSimulation}
+              onClick={resetSimulation}
             >
               Reset to Baseline
             </button>
@@ -608,13 +492,16 @@ function RoutedPage({ children }) {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/training" element={<RoutedPage><TrainingJobsList /></RoutedPage>} />
-        <Route path="/training/new" element={<RoutedPage><TrainingConfig /></RoutedPage>} />
-        <Route path="/training/:jobId" element={<RoutedPage><TrainingMonitor /></RoutedPage>} />
-      </Routes>
-    </BrowserRouter>
+    <SimulationProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/simulated-data" element={<RoutedPage><SimulatedDataFeed /></RoutedPage>} />
+          <Route path="/training" element={<RoutedPage><TrainingJobsList /></RoutedPage>} />
+          <Route path="/training/new" element={<RoutedPage><TrainingConfig /></RoutedPage>} />
+          <Route path="/training/:jobId" element={<RoutedPage><TrainingMonitor /></RoutedPage>} />
+        </Routes>
+      </BrowserRouter>
+    </SimulationProvider>
   )
 }
