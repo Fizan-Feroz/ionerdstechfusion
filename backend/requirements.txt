@@ -5,3 +5,4 @@ sqlalchemy
 python-dotenv
 pandas
 requests
+python-telegram-bot==21.6

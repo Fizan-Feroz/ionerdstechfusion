@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { BrowserRouter, Routes, Route, Link, NavLink } from 'react-router-dom'
 import TrainingConfig from './components/TrainingConfig'
 import TrainingMonitor from './components/TrainingMonitor'
@@ -15,6 +15,26 @@ const modelStats = [
   { label: 'Precision', value: '82.8%', tone: 'good' },
   { label: 'Recall', value: '54.9%', tone: 'warn' },
 ]
+
+const TELEGRAM_BOT_TOKEN = import.meta.env.VITE_TELEGRAM_BOT_TOKEN
+const TELEGRAM_CHAT_ID = import.meta.env.VITE_TELEGRAM_CHAT_ID
+const TELEGRAM_ALERT_COOLDOWN_MS = 5 * 60 * 1000
+
+async function sendTelegramAlertFromFrontend(message) {
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return
+  try {
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: TELEGRAM_CHAT_ID,
+        text: message,
+      }),
+    })
+  } catch (error) {
+    console.warn('Telegram alert send failed:', error)
+  }
+}
 
 function MiniIcon({ name }) {
   const common = {
@@ -288,6 +308,7 @@ function Dashboard({ theme, onToggleTheme }) {
   } = useSimulation()
   const [selectedPatientId, setSelectedPatientId] = useState(BASE_PATIENTS[0].patient_id)
   const [alertThreshold, setAlertThreshold] = useState(75)
+  const sentAlertsRef = useRef(new Map())
 
   const criticalCount = patientQueue.filter((patient) => patient.risk >= 75).length
   const alertItems = useMemo(() => buildAlerts(patientQueue), [patientQueue])
@@ -324,6 +345,18 @@ function Dashboard({ theme, onToggleTheme }) {
       setSelectedPatientId(patientQueue[0]?.patient_id)
     }
   }, [patientQueue, selectedPatientId])
+
+  useEffect(() => {
+    if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return
+    const now = Date.now()
+    alertItems.forEach((alert) => {
+      const key = `${alert.level}:${alert.text}`
+      const lastSentAt = sentAlertsRef.current.get(key) || 0
+      if (now - lastSentAt < TELEGRAM_ALERT_COOLDOWN_MS) return
+      sentAlertsRef.current.set(key, now)
+      void sendTelegramAlertFromFrontend(`🚨 [SynCura ${alert.level.toUpperCase()}] ${alert.text}`)
+    })
+  }, [alertItems])
 
   return (
     <Shell theme={theme} onToggleTheme={onToggleTheme}>

@@ -112,6 +112,19 @@ npm run dev
 
 Open `http://localhost:5173/`.
 
+Run Frontend + Backend Together (Windows)
+-----------------------------------------
+
+From the repository root, start both services with one command:
+
+```powershell
+.\start-dev.ps1
+```
+
+This opens two new PowerShell windows:
+- Backend API on `http://127.0.0.1:8000`
+- Frontend Vite app on `http://127.0.0.1:5173`
+
 Dashboard simulation controls (on the main page):
 - Scenario buttons: `Baseline Mix`, `Respiratory Decline`, `Septic Shock`, `Cardiac Stress`, `Recovery Trend`
 - `Pause Simulation` / `Resume Simulation`
