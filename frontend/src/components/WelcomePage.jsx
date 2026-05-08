@@ -1,10 +1,20 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import syncuraLogo from '../assets/syncura-logo.png'
 
 export default function WelcomePage() {
+  const [theme, setTheme] = useState(() => {
+    const storedTheme = localStorage.getItem('syncura-theme')
+    return storedTheme === 'dark' ? 'dark' : 'light'
+  })
+  const nextTheme = theme === 'light' ? 'dark' : 'light'
+
+  useEffect(() => {
+    localStorage.setItem('syncura-theme', theme)
+  }, [theme])
+
   return (
-    <div className="welcome-container">
+    <div className={`welcome-container theme-${theme}`}>
       {/* Navigation Bar */}
       <nav className="welcome-nav">
         <div className="welcome-nav-content">
@@ -16,6 +26,14 @@ export default function WelcomePage() {
             <a href="#features" className="welcome-nav-link">Features</a>
             <a href="#tech" className="welcome-nav-link">Tech Stack</a>
             <a href="#about" className="welcome-nav-link">About</a>
+            <button
+              type="button"
+              className="theme-toggle"
+              onClick={() => setTheme(nextTheme)}
+              aria-label={`Switch to ${nextTheme} theme`}
+            >
+              {theme === 'light' ? 'Dark mode' : 'Light mode'}
+            </button>
           </div>
         </div>
       </nav>
@@ -86,24 +104,24 @@ export default function WelcomePage() {
               <span className="footer-tag">MODEL_LOG: INFERENCE_ACTIVE</span>
             </div>
           </div>
-        </div>
 
-        {/* Model Accuracy Badge */}
-        <div className="accuracy-badge">
-          <div className="accuracy-content">
-            <svg className="accuracy-icon" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M12 22C6.48 22 2 17.52 2 12s4.48-10 10-10 10 4.48 10 10-4.48 10-10 10z"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path d="M12 6v6l4 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <div>
-              <div className="accuracy-label">Model Accuracy</div>
-              <div className="accuracy-value">96.2%</div>
+          {/* Model Accuracy Badge */}
+          <div className="accuracy-badge">
+            <div className="accuracy-content">
+              <svg className="accuracy-icon" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M12 22C6.48 22 2 17.52 2 12s4.48-10 10-10 10 4.48 10 10-4.48 10-10 10z"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path d="M12 6v6l4 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <div>
+                <div className="accuracy-label">Model Accuracy</div>
+                <div className="accuracy-value">96.2%</div>
+              </div>
             </div>
           </div>
         </div>

@@ -170,6 +170,27 @@ input {
   display: block;
 }
 
+.theme-toggle-sidebar {
+  min-height: 34px;
+  width: 100%;
+  padding: 0 12px;
+  color: #d5e8ec;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+
+.theme-toggle-sidebar:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
 .pulse-dot {
   width: 10px;
   height: 10px;
@@ -900,6 +921,150 @@ input[type="range"] {
 
 .main-surface .rounded-lg {
   border-radius: 8px;
+}
+
+.app-shell.theme-dark {
+  background: #0d161d;
+}
+
+.app-shell.theme-dark .sidebar {
+  color: #dce8ec;
+  background: #0a2228;
+  border-right-color: rgba(162, 193, 200, 0.2);
+}
+
+.app-shell.theme-dark .brand strong {
+  color: #e9f2f4;
+}
+
+.app-shell.theme-dark .brand small,
+.app-shell.theme-dark .sidebar-status small {
+  color: rgba(220, 232, 236, 0.75);
+}
+
+.app-shell.theme-dark .nav-item {
+  color: rgba(220, 232, 236, 0.85);
+}
+
+.app-shell.theme-dark .nav-item:hover,
+.app-shell.theme-dark .nav-item.active {
+  background: rgba(127, 182, 195, 0.16);
+  border-color: rgba(127, 182, 195, 0.28);
+}
+
+.app-shell.theme-dark .theme-toggle-sidebar {
+  color: #dce8ec;
+  background: rgba(127, 182, 195, 0.16);
+  border-color: rgba(127, 182, 195, 0.28);
+}
+
+.app-shell.theme-dark .main-surface {
+  background: #0d161d;
+}
+
+.app-shell.theme-dark h1,
+.app-shell.theme-dark h2,
+.app-shell.theme-dark h3 {
+  color: #eaf2f4;
+}
+
+.app-shell.theme-dark .eyebrow,
+.app-shell.theme-dark .summary-tile small,
+.app-shell.theme-dark .panel-heading p,
+.app-shell.theme-dark .patient-identity small,
+.app-shell.theme-dark .risk-block small,
+.app-shell.theme-dark .signal-row small,
+.app-shell.theme-dark .timestamp,
+.app-shell.theme-dark .alerts-empty {
+  color: #9ab0b7;
+}
+
+.app-shell.theme-dark .summary-tile,
+.app-shell.theme-dark .panel,
+.app-shell.theme-dark .metric-card,
+.app-shell.theme-dark .scenario-panel,
+.app-shell.theme-dark .alerts-panel,
+.app-shell.theme-dark .sim-feed-meta,
+.app-shell.theme-dark .sim-feed-table-wrap,
+.app-shell.theme-dark .main-surface .bg-white.rounded-lg.shadow-lg {
+  background: rgba(20, 34, 43, 0.92);
+  border-color: #2a3f49;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
+}
+
+.app-shell.theme-dark .summary-tile strong,
+.app-shell.theme-dark .patient-identity strong,
+.app-shell.theme-dark .vital-strip b,
+.app-shell.theme-dark .risk-dial span,
+.app-shell.theme-dark .lead-signal,
+.app-shell.theme-dark .compare-grid p {
+  color: #eaf2f4;
+}
+
+.app-shell.theme-dark .summary-tile span,
+.app-shell.theme-dark .metric-card span,
+.app-shell.theme-dark .signal-row span {
+  color: #adc1c8;
+}
+
+.app-shell.theme-dark .patient-row,
+.app-shell.theme-dark .explainability-waveform svg {
+  background: #12232d;
+  border-color: #2a404a;
+}
+
+.app-shell.theme-dark .vital-strip span {
+  color: #b1c2c9;
+  background: #162a34;
+  border-color: #2c4550;
+}
+
+.app-shell.theme-dark .bar-track {
+  background: #223742;
+}
+
+.app-shell.theme-dark .risk-dial {
+  background: conic-gradient(#d65a4a var(--risk), #314751 0);
+}
+
+.app-shell.theme-dark .risk-dial span {
+  background: #11202a;
+}
+
+.app-shell.theme-dark .inspect-button {
+  color: #c3d8de;
+  background: #1a313b;
+  border-color: #32505b;
+}
+
+.app-shell.theme-dark .inspect-button.active,
+.app-shell.theme-dark .button.primary,
+.app-shell.theme-dark .scenario-button.active {
+  color: #062027;
+  background: #8adce8;
+  border-color: #8adce8;
+}
+
+.app-shell.theme-dark .button.secondary,
+.app-shell.theme-dark .scenario-button,
+.app-shell.theme-dark .scenario-button.action {
+  color: #c7dde2;
+  background: #18303a;
+  border-color: #31515d;
+}
+
+.app-shell.theme-dark .sim-feed-table th {
+  color: #bdd1d7;
+  background: #152b35;
+}
+
+.app-shell.theme-dark .sim-feed-table th,
+.app-shell.theme-dark .sim-feed-table td {
+  border-bottom-color: #29414b;
+}
+
+.app-shell.theme-dark .sim-feed-table tbody tr:hover {
+  background: #172e38;
 }
 
 @media (max-width: 1180px) {

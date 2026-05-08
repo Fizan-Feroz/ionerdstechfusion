@@ -78,9 +78,9 @@ function MiniIcon({ name }) {
   }
 }
 
-function Shell({ children }) {
+function Shell({ children, theme, onToggleTheme }) {
   return (
-    <div className="app-shell">
+    <div className={`app-shell theme-${theme}`}>
       <aside className="sidebar">
         <Link to="/" className="brand" aria-label="SynCura clinical intelligence">
           <img src={syncuraLogo} alt="SynCura logo" className="brand-logo" />
@@ -104,6 +104,10 @@ function Shell({ children }) {
             Training
           </NavLink>
         </nav>
+
+        <button type="button" className="theme-toggle-sidebar" onClick={onToggleTheme}>
+          {theme === 'light' ? 'Dark mode' : 'Light mode'}
+        </button>
 
         <div className="sidebar-status">
           <span className="pulse-dot" />
@@ -270,7 +274,7 @@ function classificationStats(rows) {
   }
 }
 
-function Dashboard() {
+function Dashboard({ theme, onToggleTheme }) {
   const {
     activeScenario,
     activeScenarioLabel,
@@ -322,7 +326,7 @@ function Dashboard() {
   }, [patientQueue, selectedPatientId])
 
   return (
-    <Shell>
+    <Shell theme={theme} onToggleTheme={onToggleTheme}>
       <section className="page-header">
         <div>
           <p className="eyebrow">Real-time patient intelligence</p>
@@ -551,21 +555,46 @@ function Dashboard() {
   )
 }
 
-function RoutedPage({ children }) {
-  return <Shell>{children}</Shell>
+function RoutedPage({ children, theme, onToggleTheme }) {
+  return <Shell theme={theme} onToggleTheme={onToggleTheme}>{children}</Shell>
 }
 
 export default function App() {
+  const [theme, setTheme] = useState(() => {
+    const storedTheme = localStorage.getItem('syncura-theme')
+    return storedTheme === 'dark' ? 'dark' : 'light'
+  })
+  const toggleTheme = () => setTheme((current) => (current === 'light' ? 'dark' : 'light'))
+
+  useEffect(() => {
+    localStorage.setItem('syncura-theme', theme)
+  }, [theme])
+
   return (
     <SimulationProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<WelcomePage />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/simulated-data" element={<RoutedPage><SimulatedDataFeed /></RoutedPage>} />
-          <Route path="/training" element={<RoutedPage><TrainingJobsList /></RoutedPage>} />
-          <Route path="/training/new" element={<RoutedPage><TrainingConfig /></RoutedPage>} />
-          <Route path="/training/:jobId" element={<RoutedPage><TrainingMonitor /></RoutedPage>} />
+          <Route
+            path="/dashboard"
+            element={<Dashboard theme={theme} onToggleTheme={toggleTheme} />}
+          />
+          <Route
+            path="/simulated-data"
+            element={<RoutedPage theme={theme} onToggleTheme={toggleTheme}><SimulatedDataFeed /></RoutedPage>}
+          />
+          <Route
+            path="/training"
+            element={<RoutedPage theme={theme} onToggleTheme={toggleTheme}><TrainingJobsList /></RoutedPage>}
+          />
+          <Route
+            path="/training/new"
+            element={<RoutedPage theme={theme} onToggleTheme={toggleTheme}><TrainingConfig /></RoutedPage>}
+          />
+          <Route
+            path="/training/:jobId"
+            element={<RoutedPage theme={theme} onToggleTheme={toggleTheme}><TrainingMonitor /></RoutedPage>}
+          />
         </Routes>
       </BrowserRouter>
     </SimulationProvider>
