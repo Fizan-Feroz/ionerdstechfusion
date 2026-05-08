@@ -3,3 +3,5 @@ uvicorn
 paho-mqtt
 sqlalchemy
 python-dotenv
+pandas
+requests
