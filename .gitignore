@@ -24,8 +24,6 @@ build/
 node_modules/
 dist/
 build/
-package-lock.json
-yarn.lock
 
 # Environment files
 .env
@@ -39,3 +37,14 @@ yarn.lock
 # OS
 .DS_Store
 Thumbs.db
+
+# ML Training artifacts
+ml/training_runs/**/*.pt
+ml/training_runs/**/*.log
+ml/training_runs/**/training.log
+ml/training_runs/**/stderr.log
+ml/training_runs/**/stdout.log
+ml/models/*.pt
+
+# Frontend build artifacts
+frontend/package-lock.json
