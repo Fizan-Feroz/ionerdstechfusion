@@ -1,6 +1,16 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import syncuraLogo from '../assets/syncura-logo.png'
+import ArchitecturePage from './ArchitecturePage'
+
+function SynCuraWord({ className = '' }) {
+  return (
+    <span className={`syncura-word ${className}`.trim()}>
+      <span className="syncura-syn">Syn</span>
+      <span className="syncura-cura">Cura</span>
+    </span>
+  )
+}
 
 export default function WelcomePage() {
   const [theme, setTheme] = useState(() => {
@@ -20,7 +30,7 @@ export default function WelcomePage() {
         <div className="welcome-nav-content">
           <Link to="/" className="welcome-logo">
             <img src={syncuraLogo} alt="SynCura logo" className="welcome-logo-icon" />
-            <span className="welcome-brand-name">SynCura</span>
+            <span className="welcome-brand-name"><SynCuraWord /></span>
           </Link>
           <div className="welcome-nav-links">
             <a href="#features" className="welcome-nav-link">Features</a>
@@ -52,15 +62,15 @@ export default function WelcomePage() {
               <span className="highlight">Intelligence</span>
             </h1>
             <p className="welcome-subheadline">
-              Bridging the gap between raw medical data and life-saving decisions. SynCura provides an end-to-end framework for ML-powered ICU patient monitoring and outcome prediction.
+              Bridging the gap between raw medical data and life-saving decisions. <SynCuraWord /> provides an end-to-end framework for ML-powered ICU patient monitoring and outcome prediction.
             </p>
             <div className="welcome-cta-group">
               <Link to="/dashboard" className="welcome-btn welcome-btn-primary">
                 Explore Features →
               </Link>
-              <button className="welcome-btn welcome-btn-secondary">
+              <a href="#architecture" className="welcome-btn welcome-btn-secondary">
                 See Architecture
-              </button>
+              </a>
             </div>
           </div>
 
@@ -196,10 +206,15 @@ export default function WelcomePage() {
         </div>
       </section>
 
+      {/* Embedded Architecture Preview */}
+      <section className="welcome-architecture">
+        <ArchitecturePage embedded={true} />
+      </section>
+
       {/* CTA Section */}
       <section className="welcome-cta">
         <h2>Ready to Enhance Patient Outcomes?</h2>
-        <p>Start exploring SynCura's predictive capabilities with real-time ICU monitoring.</p>
+        <p>Start exploring <SynCuraWord />'s predictive capabilities with real-time ICU monitoring.</p>
         <Link to="/dashboard" className="welcome-btn welcome-btn-primary welcome-btn-large">
           Launch Dashboard
         </Link>

@@ -3,11 +3,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import asyncio
-import importlib.util
 import json
 import logging
+import os
+import requests
 from pathlib import Path
 import time
+from dotenv import load_dotenv
+
+# Load environment variables from .env
+load_dotenv()
+
+# Discord Webhook Configuration - MUST be defined before use
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
+
 try:
     from backend.db import init_db, insert_vital, get_latest_vitals, get_top_patients
     from backend.inference import get_engine
@@ -21,6 +30,12 @@ app = FastAPI()
 init_db()
 logger = logging.getLogger("syncura.alerts")
 
+# Log Discord webhook configuration at startup
+if DISCORD_WEBHOOK_URL:
+    logger.info("✅ Discord webhook configured (URL length: %d chars)", len(DISCORD_WEBHOOK_URL))
+else:
+    logger.warning("⚠️ Discord webhook NOT configured. Set DISCORD_WEBHOOK_URL in .env for alerts")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -30,33 +45,41 @@ app.add_middleware(
 )
 
 inference_engine = get_engine()
-ALERT_COOLDOWN_SECONDS = 300
+ALERT_COOLDOWN_SECONDS = int(os.getenv("ALERT_COOLDOWN_SECONDS", "120"))
+# Minimum risk required to send risk-based Discord alerts (0-100)
+MIN_DISCORD_RISK = int(os.getenv("MIN_DISCORD_RISK", "90"))
+
+# Internal cache for last-sent timestamps
 _last_alert_sent = {}
 
+# Key used when applying a per-patient cooldown (aggregate alerts)
+_PATIENT_COOLDOWN_KEY = "__patient_alert__"
 
-def _load_telegram_bot_sender():
-    """Load send_alert() from chatbot-tele/bot.py."""
-    bot_path = Path(__file__).resolve().parents[1] / "chatbot-tele" / "bot.py"
-    if not bot_path.exists():
-        logger.warning("Telegram bot file not found at %s", bot_path)
-        return None
+
+async def send_discord_alert(message: str):
+    """Send alert to Discord via webhook."""
+    if not DISCORD_WEBHOOK_URL:
+        logger.debug("Discord webhook URL not configured, skipping alert")
+        return
     try:
-        spec = importlib.util.spec_from_file_location("chatbot_tele_bot", bot_path)
-        if spec is None or spec.loader is None:
-            logger.warning("Unable to create module spec for %s", bot_path)
-            return None
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return getattr(module, "send_alert", None)
+        response = requests.post(
+            DISCORD_WEBHOOK_URL,
+            json={"content": message},
+            timeout=5
+        )
+        response.raise_for_status()
+        logger.info("Alert sent to Discord: %s", message[:50])
     except Exception as exc:
-        logger.warning("Failed to load Telegram bot sender: %s", exc)
-        return None
-
-
-telegram_send_alert = _load_telegram_bot_sender()
+        logger.warning("Failed to send Discord alert: %s", exc)
 
 
 def _should_send_alert(patient_id: str, alert_key: str) -> bool:
+    """Return True if an alert identified by (patient_id, alert_key) may be sent.
+
+    The `alert_key` can be a specific alert text or a special patient-level key
+    (see `_PATIENT_COOLDOWN_KEY`) to apply a cooldown for all alerts for a
+    patient (aggregation).
+    """
     now = time.time()
     cache_key = (patient_id, alert_key)
     last_sent = _last_alert_sent.get(cache_key, 0)
@@ -64,6 +87,11 @@ def _should_send_alert(patient_id: str, alert_key: str) -> bool:
         return False
     _last_alert_sent[cache_key] = now
     return True
+
+
+def _should_send_patient_alert(patient_id: str) -> bool:
+    """Helper: apply cooldown at the patient level (aggregate alerts)."""
+    return _should_send_alert(patient_id, _PATIENT_COOLDOWN_KEY)
 
 
 def _build_live_alerts(vital: dict, risk_score: float):
@@ -85,18 +113,49 @@ def _build_live_alerts(vital: dict, risk_score: float):
     return alerts
 
 
-def _dispatch_telegram_live_alerts(vital: dict, risk_score: float):
-    if telegram_send_alert is None:
+def _dispatch_discord_live_alerts(vital: dict, risk_score: float):
+    """Dispatch alerts to Discord via webhook.
+
+    This function aggregates multiple alert items for the same patient into a
+    single Discord message and applies a per-patient cooldown to avoid
+    spamming. It also respects a minimum risk threshold for risk-based alerts.
+    """
+    if not DISCORD_WEBHOOK_URL:
         return
+
     patient_id = vital.get("patient_id", "unknown")
-    for level, text in _build_live_alerts(vital, risk_score):
-        alert_key = f"{level}:{text}"
-        if not _should_send_alert(patient_id, alert_key):
-            continue
-        try:
-            asyncio.run(telegram_send_alert(f"🚨 [SynCura {level.upper()}] {text}"))
-        except Exception as exc:
-            logger.warning("Failed sending Telegram alert for %s: %s", patient_id, exc)
+
+    alerts = _build_live_alerts(vital, risk_score)
+    if not alerts:
+        return
+
+    # Optionally filter by minimum risk for purely risk-based notifications
+    if risk_score < MIN_DISCORD_RISK:
+        # allow SpO2/RespRate/Temp warnings to still be notified
+        non_risk_alerts = [a for a in alerts if a[0] != 'critical']
+        if not non_risk_alerts:
+            return
+        alerts = non_risk_alerts
+
+    # Aggregate alert texts and compute highest severity
+    levels = {'info': 0, 'warning': 1, 'critical': 2}
+    highest = 'info'
+    texts = []
+    for level, text in alerts:
+        texts.append(text)
+        if levels.get(level, 0) > levels.get(highest, 0):
+            highest = level
+
+    # Apply patient-level cooldown to avoid multiple messages
+    if not _should_send_patient_alert(patient_id):
+        logger.debug("Suppressed alerts for %s due to cooldown", patient_id)
+        return
+
+    message = f"🚨 [SynCura {highest.upper()}] Patient {patient_id}: " + "; ".join(texts)
+    try:
+        asyncio.run(send_discord_alert(message))
+    except Exception as exc:
+        logger.warning("Failed sending Discord alert for %s: %s", patient_id, exc)
 
 
 class VitalRecord(BaseModel):
@@ -137,7 +196,7 @@ def ingest_vital(vital: VitalRecord):
     
     # Store to database
     insert_vital(vital_dict)
-    _dispatch_telegram_live_alerts(vital_dict, risk_score)
+    _dispatch_discord_live_alerts(vital_dict, risk_score)
     
     return {"patient_id": vital_dict['patient_id'], "risk_score": risk_score, "stored": True}
 

@@ -2,14 +2,28 @@
 Real-time inference module: loads trained LSTM and generates risk scores.
 """
 import os
+import glob
 import torch
 import numpy as np
 from collections import deque
 import threading
 
 
+# Determine model path: allow override via MODEL_PATH env var, check common paths,
+# or pick the latest saved model from ml/training_runs/*/model.pt
+DEFAULT_MODEL_PATH = os.getenv('MODEL_PATH', 'ml/models/lstm_baseline.pt')
+if not os.path.exists(DEFAULT_MODEL_PATH):
+    alt = 'ml/lstm_baseline.pt'
+    if os.path.exists(alt):
+        DEFAULT_MODEL_PATH = alt
+    else:
+        runs = sorted(glob.glob('ml/training_runs/*/model.pt'), key=os.path.getmtime, reverse=True)
+        if runs:
+            DEFAULT_MODEL_PATH = runs[0]
+
+
 class RiskScoreEngine:
-    def __init__(self, model_path='ml/models/lstm_baseline.pt', window_size=60):
+    def __init__(self, model_path=DEFAULT_MODEL_PATH, window_size=60):
         """Load model and initialize risk score buffer."""
         self.model_path = model_path
         self.window_size = window_size
@@ -26,7 +40,15 @@ class RiskScoreEngine:
             try:
                 from ml.train_lstm import LSTMModel
                 self.model = LSTMModel(input_size=5)  # HR, RespRate, Temp, SysBP, DiasBP
-                self.model.load_state_dict(torch.load(self.model_path, map_location='cpu'))
+                # Load state dict using the safer `weights_only` option when available
+                # (prevents executing arbitrary pickled objects on load).
+                try:
+                    state = torch.load(self.model_path, map_location='cpu', weights_only=True)
+                except TypeError:
+                    # Older PyTorch versions do not support `weights_only`; fall back.
+                    state = torch.load(self.model_path, map_location='cpu')
+
+                self.model.load_state_dict(state)
                 self.model.eval()
                 print(f'[Inference] Loaded model from {self.model_path}')
             except Exception as e:

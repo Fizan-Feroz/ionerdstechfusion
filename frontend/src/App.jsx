@@ -5,6 +5,8 @@ import TrainingMonitor from './components/TrainingMonitor'
 import TrainingJobsList from './components/TrainingJobsList'
 import SimulatedDataFeed from './components/SimulatedDataFeed'
 import WelcomePage from './components/WelcomePage'
+import ArchitecturePage from './components/ArchitecturePage'
+import SensorWaveform from './components/SensorWaveform'
 import { BASE_PATIENTS, SimulationProvider, useSimulation } from './simulationContext'
 import syncuraLogo from './assets/syncura-logo.png'
 import './welcome.css'
@@ -16,23 +18,21 @@ const modelStats = [
   { label: 'Recall', value: '54.9%', tone: 'warn' },
 ]
 
-const TELEGRAM_BOT_TOKEN = import.meta.env.VITE_TELEGRAM_BOT_TOKEN
-const TELEGRAM_CHAT_ID = import.meta.env.VITE_TELEGRAM_CHAT_ID
-const TELEGRAM_ALERT_COOLDOWN_MS = 5 * 60 * 1000
+const DISCORD_WEBHOOK_URL = import.meta.env.VITE_DISCORD_WEBHOOK_URL
+const DISCORD_ALERT_COOLDOWN_MS = 2 * 60 * 1000
 
-async function sendTelegramAlertFromFrontend(message) {
-  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return
+async function sendDiscordAlertFromFrontend(message) {
+  if (!DISCORD_WEBHOOK_URL) return
   try {
-    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    await fetch(DISCORD_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        chat_id: TELEGRAM_CHAT_ID,
-        text: message,
+        content: message,
       }),
     })
   } catch (error) {
-    console.warn('Telegram alert send failed:', error)
+    console.warn('Discord alert send failed:', error)
   }
 }
 
@@ -98,6 +98,15 @@ function MiniIcon({ name }) {
   }
 }
 
+function SynCuraWord({ className = '' }) {
+  return (
+    <span className={`syncura-word ${className}`.trim()}>
+      <span className="syncura-syn">Syn</span>
+      <span className="syncura-cura">Cura</span>
+    </span>
+  )
+}
+
 function Shell({ children, theme, onToggleTheme }) {
   return (
     <div className={`app-shell theme-${theme}`}>
@@ -105,7 +114,7 @@ function Shell({ children, theme, onToggleTheme }) {
         <Link to="/" className="brand" aria-label="SynCura clinical intelligence">
           <img src={syncuraLogo} alt="SynCura logo" className="brand-logo" />
           <span>
-            <strong>SynCura</strong>
+            <strong><SynCuraWord /></strong>
             <small>Clinical Intelligence</small>
           </span>
         </Link>
@@ -119,9 +128,17 @@ function Shell({ children, theme, onToggleTheme }) {
             <span aria-hidden="true">◍</span>
             Simulated Data
           </NavLink>
+          <NavLink to="/waveforms" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <span aria-hidden="true">〰️</span>
+            Waveforms
+          </NavLink>
           <NavLink to="/training" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
             <span aria-hidden="true">▣</span>
             Training
+          </NavLink>
+          <NavLink to="/architecture" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <span aria-hidden="true">◉</span>
+            Architecture
           </NavLink>
         </nav>
 
@@ -229,17 +246,33 @@ function buildAlerts(patients) {
   const alerts = []
   patients.forEach((patient) => {
     if (patient.risk >= 90) {
-      alerts.push({ level: 'critical', text: `Patient ${patient.patient_id} at ${patient.risk}% risk - immediate bedside review needed.` })
+      alerts.push({
+        patientId: patient.patient_id,
+        level: 'critical',
+        text: `Patient ${patient.patient_id} at ${patient.risk}% risk - immediate bedside review needed.`
+      })
       return
     }
     if (patient.vitals.SpO2 <= 88) {
-      alerts.push({ level: 'warning', text: `Patient ${patient.patient_id} has low SpO2 (${patient.vitals.SpO2}%).` })
+      alerts.push({
+        patientId: patient.patient_id,
+        level: 'warning',
+        text: `Patient ${patient.patient_id} has low SpO2 (${patient.vitals.SpO2}%).`
+      })
     }
     if (patient.vitals.Resp >= 30) {
-      alerts.push({ level: 'warning', text: `Patient ${patient.patient_id} respiratory rate elevated (${patient.vitals.Resp}/min).` })
+      alerts.push({
+        patientId: patient.patient_id,
+        level: 'warning',
+        text: `Patient ${patient.patient_id} respiratory rate elevated (${patient.vitals.Resp}/min).`
+      })
     }
     if (patient.vitals.Temp >= 39) {
-      alerts.push({ level: 'info', text: `Patient ${patient.patient_id} temperature trend suggests infection (${patient.vitals.Temp} C).` })
+      alerts.push({
+        patientId: patient.patient_id,
+        level: 'info',
+        text: `Patient ${patient.patient_id} temperature trend suggests infection (${patient.vitals.Temp} C).`
+      })
     }
   })
   return alerts.slice(0, 5)
@@ -347,14 +380,14 @@ function Dashboard({ theme, onToggleTheme }) {
   }, [patientQueue, selectedPatientId])
 
   useEffect(() => {
-    if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return
+    if (!DISCORD_WEBHOOK_URL) return
     const now = Date.now()
     alertItems.forEach((alert) => {
-      const key = `${alert.level}:${alert.text}`
+      const key = alert.patientId
       const lastSentAt = sentAlertsRef.current.get(key) || 0
-      if (now - lastSentAt < TELEGRAM_ALERT_COOLDOWN_MS) return
+      if (now - lastSentAt < DISCORD_ALERT_COOLDOWN_MS) return
       sentAlertsRef.current.set(key, now)
-      void sendTelegramAlertFromFrontend(`🚨 [SynCura ${alert.level.toUpperCase()}] ${alert.text}`)
+      void sendDiscordAlertFromFrontend(`🚨 [SynCura ${alert.level.toUpperCase()}] ${alert.text}`)
     })
   }, [alertItems])
 
@@ -363,7 +396,7 @@ function Dashboard({ theme, onToggleTheme }) {
       <section className="page-header">
         <div>
           <p className="eyebrow">Real-time patient intelligence</p>
-          <h1>SynCura Dashboard</h1>
+          <h1><SynCuraWord /> Dashboard</h1>
         </div>
         <div className="header-actions">
           <Link to="/training/new" className="button secondary">New model run</Link>
@@ -627,6 +660,14 @@ export default function App() {
           <Route
             path="/training/:jobId"
             element={<RoutedPage theme={theme} onToggleTheme={toggleTheme}><TrainingMonitor /></RoutedPage>}
+          />
+          <Route
+            path="/architecture"
+            element={<RoutedPage theme={theme} onToggleTheme={toggleTheme}><ArchitecturePage /></RoutedPage>}
+          />
+          <Route
+            path="/waveforms"
+            element={<RoutedPage theme={theme} onToggleTheme={toggleTheme}><SensorWaveform /></RoutedPage>}
           />
         </Routes>
       </BrowserRouter>

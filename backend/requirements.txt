@@ -5,4 +5,4 @@ sqlalchemy
 python-dotenv
 pandas
 requests
-python-telegram-bot==21.6
+discord.py==2.3.2

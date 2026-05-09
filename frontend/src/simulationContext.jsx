@@ -189,13 +189,24 @@ function updatePatient(patient, scenarioProfile, scenarioLead) {
     )
   )
   const riskChange = nextRisk - patient.risk
+  // Compute lead: prefer an explicit deterioration label when risk is critical,
+  // otherwise use trajectory-specific lead for recovering trajectories,
+  // and fall back to the current scenario lead.
+  let leadLabel = scenarioLead
+  if (nextRisk >= 85) {
+    leadLabel = 'Multi-organ deterioration'
+  } else if (nextRisk < 45) {
+    leadLabel = 'Baseline recovery'
+  } else if (patient.trajectory === 'recovery') {
+    leadLabel = traj.lead
+  }
 
   return {
     ...patient,
     risk: nextRisk,
     trend: `${riskChange >= 0 ? '+' : ''}${riskChange}`,
     status: statusForRisk(nextRisk),
-    lead: nextRisk < 45 ? 'Baseline recovery' : patient.trajectory === 'recovery' ? traj.lead : scenarioLead,
+    lead: leadLabel,
     vitals: nextVitals,
     waveform: [...patient.waveform.slice(1), nextRisk],
   }
@@ -206,13 +217,46 @@ export function SimulationProvider({ children }) {
   const [patientQueue, setPatientQueue] = useState(() => seedIcuEnvironment(DEFAULT_PATIENTS))
   const [lastUpdated, setLastUpdated] = useState(new Date())
   const [isPaused, setIsPaused] = useState(true)
+  const lastIngestTime = React.useRef({}) // Track last ingest time per patient
 
+  // Send vitals to backend for alert processing (with cooldown)
   useEffect(() => {
     if (isPaused) return undefined
 
     const intervalId = window.setInterval(() => {
       const { profile, lead } = SCENARIOS[activeScenario]
-      setPatientQueue((current) => current.map((patient) => updatePatient(patient, profile, lead)))
+      setPatientQueue((current) => {
+        const updated = current.map((patient) => updatePatient(patient, profile, lead))
+        const now = Date.now()
+        const INGEST_COOLDOWN_MS = 10000 // Send vitals max once every 10 seconds per patient
+        
+        // Send each patient's vitals to backend for risk scoring and alerts
+        updated.forEach((patient) => {
+          const lastTime = lastIngestTime.current[patient.patient_id] || 0
+          
+          // Only send if cooldown has passed
+          if (now - lastTime >= INGEST_COOLDOWN_MS) {
+            const vital = {
+              patient_id: patient.patient_id,
+              timestamp: Date.now() / 1000,
+              HR: patient.vitals.HR,
+              SpO2: patient.vitals.SpO2,
+              RespRate: patient.vitals.Resp,
+              Temp: patient.vitals.Temp,
+            }
+            
+            fetch('http://127.0.0.1:8000/ingest', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(vital),
+            }).catch((err) => console.warn('Failed to ingest vital:', err))
+            
+            lastIngestTime.current[patient.patient_id] = now
+          }
+        })
+        
+        return updated
+      })
       setLastUpdated(new Date())
     }, 1000)
     return () => window.clearInterval(intervalId)
