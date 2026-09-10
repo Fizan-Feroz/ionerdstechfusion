@@ -97,6 +97,10 @@ def train(
     progress_callback=None,
     pos_weight=None,
     model_class=None,
+    model=None,
+    optimizer=None,
+    dropout=None,
+    weight_decay=0.0,
 ):
     """Train LSTM on (X, y).
 
@@ -104,7 +108,13 @@ def train(
     - Keeps DataLoader CPU-based and moves batches to device each step.
     - `progress_callback(epoch, metrics_dict)` is optional.
     - `pos_weight`: float ratio (neg/pos) to upweight positive class via per-sample loss weighting.
-    - `model_class`: which model to use (default: AttentionLSTMModel).
+    - `model_class`: which model to create when `model` is not given (default: AttentionLSTMModel).
+    - `model` / `optimizer`: pass an existing model (and its optimizer) to
+      continue training it instead of starting from scratch. Required for
+      correct per-epoch training loops with early stopping.
+    - `dropout`: dropout rate for models that support it (ignored otherwise).
+    - `weight_decay`: L2 regularization for Adam.
+    - Returns `(model, optimizer)` so callers can keep training the same model.
     """
     dataset = SimpleLSTMDataset(X, y)
     if device is None:
@@ -113,10 +123,20 @@ def train(
     pin = device == "cuda"
     dl = DataLoader(dataset, batch_size=batch_size, shuffle=True, pin_memory=pin)
 
-    if model_class is None:
-        model_class = AttentionLSTMModel
-    model = model_class(input_size=X.shape[-1]).to(device)
-    opt = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    if model is None:
+        if model_class is None:
+            model_class = AttentionLSTMModel
+        try:
+            kwargs = {} if dropout is None else {"dropout": dropout}
+            model = model_class(input_size=X.shape[-1], **kwargs).to(device)
+        except TypeError:
+            # Model class does not support dropout (e.g. legacy LSTMModel)
+            model = model_class(input_size=X.shape[-1]).to(device)
+    else:
+        model = model.to(device)
+    if optimizer is None:
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    opt = optimizer
     loss_fn = nn.BCELoss(reduction='none')
 
     for e in range(epochs):
@@ -143,13 +163,13 @@ def train(
         if progress_callback is not None:
             progress_callback(e + 1, metrics)
 
-    return model
+    return model, opt
 
 
 if __name__ == '__main__':
     # quick smoke test with random data
     X = np.random.randn(200, 60, 6)
     y = (np.random.rand(200) > 0.8).astype(float)
-    model = train(X, y, epochs=2)
+    model, _ = train(X, y, epochs=2)
     torch.save(model.state_dict(), 'ml/lstm_baseline.pt')
     print('Saved ml/lstm_baseline.pt')

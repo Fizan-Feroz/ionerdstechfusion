@@ -320,10 +320,12 @@ def main():
     # After split:
     best_auc = 0
     patience_counter = 0
+    model, opt = None, None
 
     for epoch in range(args.epochs):
-        # Train one epoch
-        model = quick_train(X_train, y_train, epochs=1, pos_weight=pos_weight)
+        # Continue training the SAME model (weights + optimizer persist)
+        model, opt = quick_train(X_train, y_train, epochs=1, pos_weight=pos_weight,
+                                 model=model, optimizer=opt)
 
         # Evaluate
         metrics = evaluate_model(model, X_val, y_val)

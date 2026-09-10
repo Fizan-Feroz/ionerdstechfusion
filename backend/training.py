@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 import numpy as np
 import torch
+from sklearn.model_selection import GroupShuffleSplit
 from ml.dataset import load_and_create_sequences
 from ml.train_lstm import train as quick_train
 from sklearn.metrics import roc_auc_score, accuracy_score, precision_score, recall_score
@@ -56,6 +57,7 @@ class TrainingManager:
         self.jobs: Dict[str, TrainingJob] = {}
         self.active_job: Optional[str] = None
         self.history: List[Dict] = []
+        self._lock = threading.Lock()
         
     def create_job(self, config: Dict) -> TrainingJob:
         """Create a new training job"""
@@ -77,11 +79,12 @@ class TrainingManager:
         job = self.get_job(job_id)
         if not job:
             return False
-        
-        if self.active_job:
-            return False  # Only one job at a time
-        
-        self.active_job = job_id
+
+        with self._lock:
+            if self.active_job:
+                return False  # Only one job at a time
+            self.active_job = job_id
+
         thread = threading.Thread(target=self._train_worker, args=(job,), daemon=True)
         thread.start()
         return True
@@ -96,35 +99,52 @@ class TrainingManager:
             
             # Load data
             job.progress_queue.put({"type": "status", "message": "Loading dataset..."})
-            X, y = load_and_create_sequences(
+            X, y, patient_ids = load_and_create_sequences(
                 physionet_dir=config['physionet_path'],
                 outcomes_file=config['outcomes_path'],
-                vital_features=config.get('vital_features', ['HR', 'RespRate', 'Temp', 'NISysABP', 'NIDiasABP']),
+                vital_features=config.get('vital_features', ['HR', 'RespRate', 'Temp', 'NISysABP', 'NIDiasABP', 'SpO2']),
                 window_minutes=config.get('window', 60),
-                max_patients=config.get('max_patients', 100)
+                max_patients=config.get('max_patients', 100),
+                stride=config.get('stride', 1),
             )
             
             job.progress_queue.put({
                 "type": "data_loaded",
                 "shape_x": str(X.shape),
                 "shape_y": str(y.shape),
-                "class_distribution": str(np.bincount(y).tolist())
+                "class_distribution": str(np.bincount(y.astype(int)).tolist())
             })
+            
+            # Patient-level train/val split to prevent data leakage
+            gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+            train_idx, val_idx = next(gss.split(X, y, groups=patient_ids))
+            X_train, y_train = X[train_idx], y[train_idx]
+            X_val, y_val = X[val_idx], y[val_idx]
+            job.progress_queue.put({
+                "type": "status",
+                "message": f"Split data: train={X_train.shape[0]} val={X_val.shape[0]}"
+            })
+            
+            # Compute pos_weight for class imbalance
+            n_neg = int((y_train == 0).sum())
+            n_pos = int((y_train == 1).sum())
+            pos_weight = n_neg / max(1, n_pos)
             
             # Train model
             job.progress_queue.put({"type": "status", "message": "Starting training..."})
             
-            model = quick_train(
-                X, y,
+            model, _ = quick_train(
+                X_train, y_train,
                 epochs=job.total_epochs,
                 batch_size=config.get('batch_size', 32),
                 learning_rate=config.get('learning_rate', 0.001),
-                progress_callback=self._training_progress_callback(job)
+                progress_callback=self._training_progress_callback(job),
+                pos_weight=pos_weight,
             )
             
-            # Evaluate
-            job.progress_queue.put({"type": "status", "message": "Evaluating model..."})
-            metrics = self._evaluate_model(model, X, y)
+            # Evaluate on validation set
+            job.progress_queue.put({"type": "status", "message": "Evaluating on validation set..."})
+            metrics = self._evaluate_model(model, X_val, y_val)
             job.metrics.update(metrics)
             
             # Save model
@@ -170,19 +190,23 @@ class TrainingManager:
         return callback
     
     @staticmethod
-    def _evaluate_model(model, X, y):
-        """Evaluate trained model"""
+    def _evaluate_model(model, X, y, batch_size=4096):
+        """Evaluate trained model in batches to avoid OOM."""
+        device = next(model.parameters()).device
         model.eval()
+        probs_batches = []
         with torch.no_grad():
-            xb = torch.tensor(X, dtype=torch.float32)
-            probs = model(xb).numpy()
-        
+            for start in range(0, len(X), batch_size):
+                xb = torch.tensor(X[start:start + batch_size], dtype=torch.float32).to(device)
+                probs_batches.append(model(xb).detach().cpu().numpy())
+        probs = np.concatenate(probs_batches)
+
         auc = roc_auc_score(y, probs) if len(np.unique(y)) > 1 else float('nan')
         preds = (probs > 0.5).astype(int)
         acc = accuracy_score(y, preds)
         prec = precision_score(y, preds, zero_division=0)
         rec = recall_score(y, preds, zero_division=0)
-        
+
         return {
             'auc': float(auc),
             'accuracy': float(acc),

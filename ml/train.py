@@ -16,6 +16,7 @@ import logging
 from sklearn.metrics import roc_auc_score, accuracy_score, precision_score, recall_score
 from sklearn.model_selection import GroupShuffleSplit
 import torch
+from tqdm import tqdm
 
 from ml.dataset import load_and_create_sequences
 from ml.train_lstm import train as quick_train, AttentionLSTMModel
@@ -49,7 +50,7 @@ def evaluate_model(model, X, y, batch_size=4096, device=None):
     model.eval()
     probs_batches = []
     with torch.no_grad():
-        for start in range(0, len(X), batch_size):
+        for start in tqdm(range(0, len(X), batch_size), desc='Evaluating', leave=False):
             xb = torch.tensor(X[start:start + batch_size], dtype=torch.float32).to(device)
             probs_batches.append(model(xb).detach().cpu().numpy())
     probs = np.concatenate(probs_batches)
@@ -68,6 +69,11 @@ def main():
     parser.add_argument('--vital-features', nargs='+',
                         default=['HR', 'RespRate', 'Temp', 'NISysABP', 'NIDiasABP', 'SpO2'])
     parser.add_argument('--window', type=int, default=60, help='Window size in minutes')
+    parser.add_argument('--stride', type=int, default=1, help='Minutes between consecutive windows (decorrelates windows)')
+    parser.add_argument('--batch-size', type=int, default=32)
+    parser.add_argument('--lr', type=float, default=1e-3, help='Adam learning rate')
+    parser.add_argument('--dropout', type=float, default=None, help='Dropout rate (default: model default)')
+    parser.add_argument('--weight-decay', type=float, default=0.0, help='Adam L2 regularization')
     parser.add_argument('--max-patients', type=int, default=None)
     parser.add_argument('--epochs', type=int, default=20)
     parser.add_argument('--patience', type=int, default=5, help='Early stopping patience')
@@ -91,7 +97,8 @@ def main():
         outcomes_file=args.outcomes,
         vital_features=args.vital_features,
         window_minutes=args.window,
-        max_patients=args.max_patients
+        max_patients=args.max_patients,
+        stride=args.stride,
     )
     logger.info(f'Loaded X={X.shape} y={y.shape}, class distribution: {np.bincount(y.astype(int))}')
 
@@ -114,14 +121,23 @@ def main():
     patience_counter = 0
     best_model_state = None
 
-    for epoch in range(args.epochs):
-        logger.info(f'--- Epoch {epoch + 1}/{args.epochs} ---')
+    epoch_bar = tqdm(range(args.epochs), desc='Training', unit='epoch')
+    model, opt = None, None
+    for epoch in epoch_bar:
+        epoch_bar.set_postfix({'best_auc': f'{best_auc:.4f}', 'patience': f'{patience_counter}/{args.patience}'})
 
-        model = quick_train(
+        # Continue training the SAME model (weights + optimizer state persist).
+        model, opt = quick_train(
             X_train, y_train,
             epochs=1,
+            batch_size=args.batch_size,
+            learning_rate=args.lr,
             pos_weight=pos_weight,
             model_class=AttentionLSTMModel,
+            model=model,
+            optimizer=opt,
+            dropout=args.dropout,
+            weight_decay=args.weight_decay,
         )
 
         # Evaluate on validation set
@@ -135,13 +151,18 @@ def main():
             best_model_state = {k: v.clone() for k, v in model.state_dict().items()}
             save_model(model, os.path.join(run_dir, 'best_model.pt'))
             logger.info(f'  -> New best AUC: {best_auc:.4f} (saved)')
+            epoch_bar.set_postfix({'best_auc': f'{best_auc:.4f}', 'status': 'saved!'})
         else:
             patience_counter += 1
             logger.info(f'  -> No improvement ({patience_counter}/{args.patience})')
+            epoch_bar.set_postfix({'best_auc': f'{best_auc:.4f}', 'patience': f'{patience_counter}/{args.patience}'})
 
         if patience_counter >= args.patience:
             logger.info(f'Early stopping at epoch {epoch + 1}')
+            tqdm.write(f'[Early Stopping] No improvement for {args.patience} epochs. Stopping.')
             break
+
+    epoch_bar.close()
 
     # Restore best model
     if best_model_state is not None:
@@ -156,6 +177,21 @@ def main():
     metrics_path = os.path.join(run_dir, 'metrics.json')
     with open(metrics_path, 'w') as f:
         json.dump(final_metrics, f, indent=2)
+
+    # Print final summary
+    tqdm.write('\n' + '=' * 50)
+    tqdm.write('TRAINING COMPLETE')
+    tqdm.write('=' * 50)
+    tqdm.write(f'AUC-ROC:       {final_metrics["auc"]:.4f}')
+    tqdm.write(f'Accuracy:      {final_metrics["accuracy"]:.4f}')
+    tqdm.write(f'Precision:     {final_metrics["precision"]:.4f}')
+    tqdm.write(f'Recall:        {final_metrics["recall"]:.4f}')
+    tqdm.write(f'Best AUC:      {final_metrics["best_auc"]:.4f}')
+    tqdm.write(f'Epochs:        {final_metrics["epochs_trained"]}/{args.epochs}')
+    tqdm.write(f'Model saved:   {os.path.join(run_dir, "best_model.pt")}')
+    tqdm.write(f'Metrics saved: {metrics_path}')
+    tqdm.write('=' * 50)
+
     logger.info(f'Final validation metrics: {final_metrics}')
 
     # Save final model
