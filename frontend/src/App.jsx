@@ -11,11 +11,11 @@ import { BASE_PATIENTS, SimulationProvider, useSimulation } from './simulationCo
 import syncuraLogo from './assets/syncura-logo.png'
 import './welcome.css'
 
-const modelStats = [
-  { label: 'AUC-ROC', value: '0.938', tone: 'good' },
-  { label: 'Accuracy', value: '92.7%', tone: 'good' },
-  { label: 'Precision', value: '82.8%', tone: 'good' },
-  { label: 'Recall', value: '54.9%', tone: 'warn' },
+const defaultModelStats = [
+  { label: 'AUC-ROC', value: '...', tone: 'good' },
+  { label: 'Accuracy', value: '...', tone: 'good' },
+  { label: 'Precision', value: '...', tone: 'good' },
+  { label: 'Recall', value: '...', tone: 'warn' },
 ]
 
 const DISCORD_WEBHOOK_URL = import.meta.env.VITE_DISCORD_WEBHOOK_URL
@@ -342,6 +342,23 @@ function Dashboard({ theme, onToggleTheme }) {
   const [selectedPatientId, setSelectedPatientId] = useState(BASE_PATIENTS[0].patient_id)
   const [alertThreshold, setAlertThreshold] = useState(75)
   const sentAlertsRef = useRef(new Map())
+  const [liveModelStats, setLiveModelStats] = useState(defaultModelStats)
+
+  useEffect(() => {
+    fetch('http://127.0.0.1:8000/metrics')
+      .then(r => r.json())
+      .then(data => {
+        if (!data.error) {
+          setLiveModelStats([
+            { label: 'AUC-ROC', value: data.auc != null ? data.auc.toFixed(3) : '...', tone: 'good' },
+            { label: 'Accuracy', value: data.accuracy != null ? (data.accuracy * 100).toFixed(1) + '%' : '...', tone: 'good' },
+            { label: 'Precision', value: data.precision != null ? (data.precision * 100).toFixed(1) + '%' : '...', tone: 'good' },
+            { label: 'Recall', value: data.recall != null ? (data.recall * 100).toFixed(1) + '%' : '...', tone: data.recall < 0.7 ? 'warn' : 'good' },
+          ])
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   const criticalCount = patientQueue.filter((patient) => patient.risk >= 75).length
   const alertItems = useMemo(() => buildAlerts(patientQueue), [patientQueue])
@@ -385,7 +402,10 @@ function Dashboard({ theme, onToggleTheme }) {
     alertItems.forEach((alert) => {
       const key = alert.patientId
       const lastSentAt = sentAlertsRef.current.get(key) || 0
-      if (now - lastSentAt < DISCORD_ALERT_COOLDOWN_MS) return
+      // Always allow critical alerts to bypass the per-patient cooldown so
+      // clinicians receive immediate, high-severity notifications.
+      if (alert.level !== 'critical' && now - lastSentAt < DISCORD_ALERT_COOLDOWN_MS) return
+      // record send time for patient to avoid spam of follow-ups
       sentAlertsRef.current.set(key, now)
       void sendDiscordAlertFromFrontend(`🚨 [SynCura ${alert.level.toUpperCase()}] ${alert.text}`)
     })
@@ -590,7 +610,7 @@ function Dashboard({ theme, onToggleTheme }) {
             <span className="model-badge">LSTM baseline</span>
           </div>
           <div className="metric-grid">
-            {modelStats.map((stat) => (
+            {liveModelStats.map((stat) => (
               <div className={`metric-card ${stat.tone}`} key={stat.label}>
                 <span>{stat.label}</span>
                 <strong>{stat.value}</strong>

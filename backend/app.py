@@ -2,13 +2,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-import asyncio
 import json
 import logging
 import os
+import threading
+import queue
 import requests
-from pathlib import Path
 import time
+from typing import Optional
 from dotenv import load_dotenv
 
 # Load environment variables from .env
@@ -29,12 +30,17 @@ except ImportError:
 app = FastAPI()
 init_db()
 logger = logging.getLogger("syncura.alerts")
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
+    logger.addHandler(_handler)
 
 # Log Discord webhook configuration at startup
 if DISCORD_WEBHOOK_URL:
-    logger.info("✅ Discord webhook configured (URL length: %d chars)", len(DISCORD_WEBHOOK_URL))
+    logger.info("Discord webhook configured (URL length: %d chars)", len(DISCORD_WEBHOOK_URL))
 else:
-    logger.warning("⚠️ Discord webhook NOT configured. Set DISCORD_WEBHOOK_URL in .env for alerts")
+    logger.warning("Discord webhook NOT configured. Set DISCORD_WEBHOOK_URL in .env for alerts")
 
 app.add_middleware(
     CORSMiddleware,
@@ -56,10 +62,9 @@ _last_alert_sent = {}
 _PATIENT_COOLDOWN_KEY = "__patient_alert__"
 
 
-async def send_discord_alert(message: str):
-    """Send alert to Discord via webhook."""
+def send_discord_alert(message: str):
+    """Send alert to Discord via webhook (synchronous)."""
     if not DISCORD_WEBHOOK_URL:
-        logger.debug("Discord webhook URL not configured, skipping alert")
         return
     try:
         response = requests.post(
@@ -114,12 +119,7 @@ def _build_live_alerts(vital: dict, risk_score: float):
 
 
 def _dispatch_discord_live_alerts(vital: dict, risk_score: float):
-    """Dispatch alerts to Discord via webhook.
-
-    This function aggregates multiple alert items for the same patient into a
-    single Discord message and applies a per-patient cooldown to avoid
-    spamming. It also respects a minimum risk threshold for risk-based alerts.
-    """
+    """Dispatch alerts to Discord via webhook in a background thread."""
     if not DISCORD_WEBHOOK_URL:
         return
 
@@ -146,28 +146,33 @@ def _dispatch_discord_live_alerts(vital: dict, risk_score: float):
         if levels.get(level, 0) > levels.get(highest, 0):
             highest = level
 
-    # Apply patient-level cooldown to avoid multiple messages
-    if not _should_send_patient_alert(patient_id):
-        logger.debug("Suppressed alerts for %s due to cooldown", patient_id)
-        return
+    # Apply patient-level cooldown to avoid multiple messages.
+    # Critical alerts should bypass the patient-level cooldown so clinicians
+    # receive immediate notification for high-severity events.
+    if highest != 'critical':
+        if not _should_send_patient_alert(patient_id):
+            logger.debug("Suppressed alerts for %s due to cooldown", patient_id)
+            return
+    else:
+        # record the send time for the patient-level key so subsequent alerts
+        # in the cooldown window are still suppressed (prevents spamming).
+        _last_alert_sent[(patient_id, _PATIENT_COOLDOWN_KEY)] = time.time()
 
-    message = f"🚨 [SynCura {highest.upper()}] Patient {patient_id}: " + "; ".join(texts)
-    try:
-        asyncio.run(send_discord_alert(message))
-    except Exception as exc:
-        logger.warning("Failed sending Discord alert for %s: %s", patient_id, exc)
+    message = f"[SynCura {highest.upper()}] Patient {patient_id}: " + "; ".join(texts)
+    # Fire in background thread to avoid blocking the request
+    threading.Thread(target=send_discord_alert, args=(message,), daemon=True).start()
 
 
 class VitalRecord(BaseModel):
     patient_id: str
     timestamp: float
-    HR: float = None
-    RespRate: float = None
-    Temp: float = None
-    NISysABP: float = None
-    NIDiasABP: float = None
-    SpO2: float = None
-    EtCO2: float = None
+    HR: Optional[float] = None
+    RespRate: Optional[float] = None
+    Temp: Optional[float] = None
+    NISysABP: Optional[float] = None
+    NIDiasABP: Optional[float] = None
+    SpO2: Optional[float] = None
+    EtCO2: Optional[float] = None
 
 
 class TrainingConfig(BaseModel):
@@ -177,7 +182,7 @@ class TrainingConfig(BaseModel):
     batch_size: int = 32
     learning_rate: float = 0.001
     max_patients: int = 100
-    vital_features: list = ["HR", "RespRate", "Temp", "NISysABP", "NIDiasABP"]
+    vital_features: list = ["HR", "RespRate", "Temp", "NISysABP", "NIDiasABP", "SpO2"]
 
 
 @app.get("/health")
@@ -189,15 +194,15 @@ def health():
 def ingest_vital(vital: VitalRecord):
     """Ingest a vital sign reading, compute risk score, and store."""
     vital_dict = vital.dict(exclude_none=True)
-    
+
     # Compute risk score via inference engine
     risk_score = inference_engine.add_vital(vital_dict['patient_id'], vital_dict)
     vital_dict['risk_score'] = risk_score
-    
+
     # Store to database
     insert_vital(vital_dict)
     _dispatch_discord_live_alerts(vital_dict, risk_score)
-    
+
     return {"patient_id": vital_dict['patient_id'], "risk_score": risk_score, "stored": True}
 
 
@@ -244,6 +249,72 @@ def get_scores():
     return inference_engine.get_all_scores()
 
 
+@app.get("/metrics")
+def get_metrics():
+    """Return the latest trained model metrics from ml/metrics.json."""
+    metrics_path = os.path.join('ml', 'metrics.json')
+    if not os.path.exists(metrics_path):
+        # Try run directories
+        import glob
+        runs = sorted(glob.glob('ml/training_runs/run_*/metrics.json'), key=os.path.getmtime, reverse=True)
+        if runs:
+            metrics_path = runs[0]
+        else:
+            return {"error": "No trained model metrics found"}
+    with open(metrics_path) as f:
+        return json.load(f)
+
+
+@app.get("/patient/{patient_id}/explain")
+def explain_patient(patient_id: str):
+    """Return SHAP feature importance and attention weights for a patient."""
+    import numpy as np
+    from backend.inference import FEATURES
+
+    buffer_data = None
+    with inference_engine.lock:
+        if patient_id not in inference_engine.vital_buffer:
+            return {"error": f"No data for patient {patient_id}"}
+        buffer_data = np.array(list(inference_engine.vital_buffer[patient_id]), dtype=np.float32)
+
+    if inference_engine.model is None:
+        return {"error": "No model loaded"}
+
+    # Normalize the buffer
+    X = buffer_data.copy()
+    for i in range(X.shape[1]):
+        mask = ~np.isnan(X[:, i])
+        if mask.sum() > 0:
+            X[~mask, i] = X[mask, i].mean()
+        else:
+            X[:, i] = 0.0
+    if inference_engine._train_mean is not None:
+        X = (X - inference_engine._train_mean) / inference_engine._train_std
+    else:
+        std = X.std(axis=0) + 1e-6
+        X = (X - X.mean(axis=0)) / std
+    if len(X) < inference_engine.window_size:
+        pad = np.zeros((inference_engine.window_size - len(X), X.shape[1]), dtype=np.float32)
+        X = np.vstack([pad, X])
+
+    # Compute attention weights
+    attention = inference_engine.get_attention_weights(patient_id)
+
+    # Compute SHAP (may be slow, so keep nsamples small)
+    try:
+        from ml.explain import compute_shap_explanation
+        importance = compute_shap_explanation(inference_engine.model, X, FEATURE_NAMES, n_background=10)
+    except Exception as e:
+        importance = {"error": str(e)}
+
+    return {
+        "patient_id": patient_id,
+        "feature_importance": importance,
+        "attention_weights": attention,
+        "features_used": FEATURES,
+    }
+
+
 # ============ TRAINING ENDPOINTS ============
 
 @app.post("/training/start")
@@ -283,14 +354,13 @@ def get_training_progress(job_id: str):
     job = training_manager.get_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-    
+
     def progress_generator():
         while True:
             try:
                 progress_update = job.progress_queue.get(timeout=5)
                 yield json.dumps(progress_update) + "\n"
-            except:
-                # Queue empty or timeout - send current job state
+            except queue.Empty:
                 current_job = training_manager.get_job(job_id)
                 if current_job:
                     yield json.dumps({
@@ -301,5 +371,5 @@ def get_training_progress(job_id: str):
                     }) + "\n"
                 if current_job and current_job.status in ["completed", "failed"]:
                     break
-    
+
     return StreamingResponse(progress_generator(), media_type="application/x-ndjson")

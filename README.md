@@ -9,12 +9,12 @@ IONERDS ASSEMBLE!!!!!!!!!!!!!!
 Project: Predictive ICU Monitoring System (software-only)
 -------------------------------------------------------
 
-This repository contains a scaffold for a realtime ICU patient deterioration monitoring system. It includes:
+This repository contains a real-time ICU patient deterioration monitoring system with attention-based deep learning. It includes:
 
-- A FastAPI backend that stores incoming vitals to SQLite and exposes a simple REST API.
-- A CSV/MIMIC replay tool to simulate live vitals (MQTT or HTTP ingest).
-- A PyTorch LSTM training scaffold and evaluation stubs.
-- A React + Vite frontend mock dashboard and small API helper.
+- **AttentionLSTM Model**: LSTM with temporal attention, dropout, batch normalization, and early stopping
+- **FastAPI Backend**: Real-time inference, SHAP explainability, and REST API
+- **React Frontend**: ICU dashboard with scenario simulation, alerts, and training UI
+- **PhysioNet 2012**: Trained on ICU mortality prediction dataset with 6 vital signs (HR, RespRate, Temp, SysBP, DiasBP, SpO2)
 
 Status
 ------
@@ -24,20 +24,21 @@ Status
 ML Training
 -----------
 
-Install dependencies and train the LSTM baseline:
+Install dependencies and train the AttentionLSTM with early stopping:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r ml\requirements.txt
-python ml\train.py `
+python -m ml.train `
   --physionet "C:\Users\fizan\Downloads\Techfusion\predicting-mortality-of-icu-patients-the-physionetcomputing-in-cardiology-challenge-2012-1.0.0\predicting-mortality-of-icu-patients-the-physionet-computing-in-cardiology-challenge-2012-1.0.0\set-a" `
   --outcomes "C:\Users\fizan\Downloads\Techfusion\predicting-mortality-of-icu-patients-the-physionetcomputing-in-cardiology-challenge-2012-1.0.0\predicting-mortality-of-icu-patients-the-physionet-computing-in-cardiology-challenge-2012-1.0.0\Outcomes-a.txt" `
   --max-patients 100 `
-  --epochs 5
+  --epochs 20 `
+  --patience 5
 ```
 
-This loads ~100 patients, creates 60-minute sliding windows of vitals (HR, RespRate, Temp, SysBP, DiasBP), normalizes, trains an LSTM, and saves metrics to `ml/metrics.json`.
+This loads ~100 patients, creates 60-minute sliding windows of vitals (HR, RespRate, Temp, SysBP, DiasBP, SpO2), normalizes, trains an AttentionLSTM with early stopping, and saves metrics to `ml/metrics.json`.
 
 Running the Full Data Pipeline
 -------------------------------

@@ -1,5 +1,5 @@
 """
-Minimal LSTM training scaffold (PyTorch) — replace dataset loader with PhysioNet preprocessing.
+Minimal LSTM training scaffold (PyTorch) with AttentionLSTMModel.
 """
 import torch
 import torch.nn as nn
@@ -16,11 +16,11 @@ class SimpleLSTMDataset(Dataset):
         return len(self.X)
 
     def __getitem__(self, idx):
-        # Keep tensors on CPU here; move to GPU in the training loop.
         return torch.tensor(self.X[idx], dtype=torch.float32), torch.tensor(self.y[idx], dtype=torch.float32)
 
 
 class LSTMModel(nn.Module):
+    """Original plain LSTM model (kept for backward compatibility)."""
     def __init__(self, input_size, hidden_size=64, num_layers=2):
         super().__init__()
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
@@ -34,6 +34,59 @@ class LSTMModel(nn.Module):
         return self.sig(out).squeeze(-1)
 
 
+class AttentionLSTMModel(nn.Module):
+    """LSTM with temporal attention mechanism for interpretable ICU risk prediction.
+
+    Architecture follows DEWS [Choi et al., IEEE JBHI 2020] and ARLF [Li et al., IEEE Access 2025]:
+    - Multi-layer LSTM with dropout
+    - Additive attention over all time steps
+    - Batch normalization for regularization
+    - Dropout before final classification
+
+    The attention weights provide per-timestep interpretability, showing which
+    moments in the patient's trajectory most influenced the risk prediction.
+    """
+    def __init__(self, input_size, hidden_size=64, num_layers=2, dropout=0.3):
+        super().__init__()
+        self.lstm = nn.LSTM(
+            input_size, hidden_size, num_layers,
+            batch_first=True,
+            dropout=dropout if num_layers > 1 else 0.0
+        )
+        self.attention = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size),
+            nn.Tanh(),
+            nn.Linear(hidden_size, 1)
+        )
+        self.dropout = nn.Dropout(dropout)
+        self.batch_norm = nn.BatchNorm1d(hidden_size)
+        self.fc = nn.Linear(hidden_size, 1)
+        self.sig = nn.Sigmoid()
+
+    def forward(self, x):
+        lstm_out, _ = self.lstm(x)  # (batch, seq, hidden)
+
+        # Additive attention: learn which time steps matter
+        attn_scores = self.attention(lstm_out)  # (batch, seq, 1)
+        attn_weights = torch.softmax(attn_scores, dim=1)
+
+        # Weighted context vector
+        context = torch.sum(attn_weights * lstm_out, dim=1)  # (batch, hidden)
+
+        # Regularization + classification
+        context = self.dropout(context)
+        context = self.batch_norm(context)
+        out = self.fc(context)
+        return self.sig(out).squeeze(-1)
+
+    def get_attention_weights(self, x):
+        """Return per-timestep attention weights for interpretability."""
+        lstm_out, _ = self.lstm(x)
+        attn_scores = self.attention(lstm_out)
+        attn_weights = torch.softmax(attn_scores, dim=1)
+        return attn_weights.squeeze(-1)  # (batch, seq)
+
+
 def train(
     X,
     y,
@@ -42,12 +95,16 @@ def train(
     learning_rate=1e-3,
     device=None,
     progress_callback=None,
+    pos_weight=None,
+    model_class=None,
 ):
     """Train LSTM on (X, y).
 
     - Uses CUDA automatically if available, unless `device` is provided.
     - Keeps DataLoader CPU-based and moves batches to device each step.
     - `progress_callback(epoch, metrics_dict)` is optional.
+    - `pos_weight`: float ratio (neg/pos) to upweight positive class via per-sample loss weighting.
+    - `model_class`: which model to use (default: AttentionLSTMModel).
     """
     dataset = SimpleLSTMDataset(X, y)
     if device is None:
@@ -56,9 +113,11 @@ def train(
     pin = device == "cuda"
     dl = DataLoader(dataset, batch_size=batch_size, shuffle=True, pin_memory=pin)
 
-    model = LSTMModel(input_size=X.shape[-1]).to(device)
+    if model_class is None:
+        model_class = AttentionLSTMModel
+    model = model_class(input_size=X.shape[-1]).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=learning_rate)
-    loss_fn = nn.BCELoss()
+    loss_fn = nn.BCELoss(reduction='none')
 
     for e in range(epochs):
         model.train()
@@ -67,7 +126,12 @@ def train(
             xb = xb.to(device, non_blocking=True)
             yb = yb.to(device, non_blocking=True)
             pred = model(xb)
-            loss = loss_fn(pred, yb)
+            element_loss = loss_fn(pred, yb)
+            if pos_weight is not None:
+                weights = torch.where(yb == 1, pos_weight, 1.0)
+                loss = (element_loss * weights).mean()
+            else:
+                loss = element_loss.mean()
             opt.zero_grad()
             loss.backward()
             opt.step()
